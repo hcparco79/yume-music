@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
+<meta name="referrer" content="no-referrer">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0a0a0f">
@@ -1117,7 +1118,8 @@ let pendingVideoId = null;
 window.onYouTubeIframeAPIReady = function() {
   player = new YT.Player('yt-player', {
     height:'1', width:'1',
-    playerVars:{autoplay:1,controls:0,disablekb:1,enablejsapi:1,origin:location.origin,playsinline:1,modestbranding:1,rel:0,iv_load_policy:3},
+    host: YT_HOST,
+    playerVars:{autoplay:1,controls:0,disablekb:1,enablejsapi:1,origin:location.origin,playsinline:1,modestbranding:1,rel:0,iv_load_policy:3,host:'https://www.youtube-nocookie.com'},
     events:{
       onReady: () => {
         playerReady = true;
@@ -1147,6 +1149,9 @@ window.onYouTubeIframeAPIReady = function() {
 const ytScript = document.createElement('script');
 ytScript.src = 'https://www.youtube.com/iframe_api';
 document.head.appendChild(ytScript);
+
+// youtube-nocookie 호스트 설정 (광고 최소화)
+const YT_HOST = 'https://www.youtube-nocookie.com';
 
 // ============================================================
 // DATA STORE  (localStorage + JSON 백업/복원)
