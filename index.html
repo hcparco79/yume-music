@@ -1448,13 +1448,6 @@ function shuffle(arr) {
   for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; }
 }
 
-function handleEnded() {
-  if(repeatMode===2){ player.seekTo(0); player.playVideo(); return; }
-  if(queueIndex < queue.length-1){ queueIndex++; playTrack(queue[queueIndex]); }
-  else if(repeatMode===1){ queueIndex=0; playTrack(queue[0]); }
-  else { setPlayState(false); }
-}
-
 function setPlayState(playing) {
   isPlaying = playing;
   document.getElementById('play-icon').style.display = playing?'none':'block';
@@ -2240,32 +2233,6 @@ document.getElementById('search-input').addEventListener('keydown', (e) => {
 // PLAYLISTS
 // ============================================================
 
-function openPlaylistView(idx) {
-  const pl = playlists[idx];
-  if(!pl) return;
-  document.getElementById('pv-cover').textContent = pl.emoji||'🎵';
-  document.getElementById('pv-title').textContent = pl.name;
-  document.getElementById('pv-count').textContent = `${pl.tracks.length}곡`;
-  const el = document.getElementById('playlist-tracks');
-  el.innerHTML = '';
-  pl.tracks.forEach(t => el.appendChild(renderTrackItem(t, {
-    inPlaylist: idx,
-    onPlay: () => playQueue(pl.tracks, pl.tracks.indexOf(t))
-  })));
-  document.getElementById('pv-play-all').onclick = () => { if(pl.tracks.length) playQueue(pl.tracks,0); };
-  document.getElementById('pv-shuffle').onclick = () => {
-    if(!pl.tracks.length) return;
-    isShuffle=true; document.getElementById('btn-shuffle').classList.add('active');
-    playQueue(pl.tracks, Math.floor(Math.random()*pl.tracks.length));
-  };
-  // 모바일 뒤로가기 버튼
-  const backBtn = document.getElementById('pv-back');
-  backBtn.style.display = 'flex';
-  backBtn.onclick = () => { showView('playlists'); renderMobilePlaylists(); setActiveTab('playlists'); };
-  showView('playlist');
-  document.querySelectorAll('.sidebar-item').forEach(i=>i.classList.remove('active'));
-}
-
 document.getElementById('btn-new-playlist').addEventListener('click', () => {
   document.getElementById('modal-new-playlist').classList.remove('hidden');
   document.getElementById('new-pl-name').focus();
@@ -2363,6 +2330,7 @@ function openAddAllToPlaylist(tracks, albumTitle) {
 }
 
 // 단일 곡 추가 (기존 함수)
+function openAddToPlaylist(track) {
   pendingAddTrack = track;
   selectedPlaylistIdx = -1;
   const el = document.getElementById('playlist-select-list');
@@ -2447,38 +2415,6 @@ function renderQueueList() {
     el.appendChild(div);
   });
 }
-
-// ============================================================
-// CONTEXT MENU
-// ============================================================
-function showContextMenu(e, track, playlistIdx=null) {
-  const menu = document.getElementById('context-menu');
-  menu.innerHTML = '';
-  const items = [
-    { label:'재생', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>', fn: ()=>playQueue([track],0) },
-    { label:'대기열에 추가', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/></svg>', fn: ()=>{ if(!queue.length){playQueue([track],0);}else{queue.push(track);renderQueueList();showToast('대기열에 추가됨');} } },
-    { label: isLiked(track.videoId)?'좋아요 취소':'❤ 좋아요', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>', fn: ()=>toggleLike(track) },
-    { label:'플레이리스트에 추가', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>', fn: ()=>openAddToPlaylist(track) },
-    { label:'YouTube에서 열기', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>', fn: ()=>window.open(`https://www.youtube.com/watch?v=${track.videoId}`,'_blank') },
-  ];
-  if(playlistIdx!==null && playlistIdx>=0){
-    items.push({ label:'플레이리스트에서 제거', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>', danger:true, fn: ()=>{
-      playlists[playlistIdx].tracks = playlists[playlistIdx].tracks.filter(t=>t.videoId!==track.videoId);
-      savePlaylists(); renderPlaylistNav(); openPlaylistView(playlistIdx); showToast('제거되었습니다');
-    }});
-  }
-  items.forEach(item => {
-    const btn = document.createElement('button');
-    btn.className = 'ctx-item' + (item.danger?' danger':'');
-    btn.innerHTML = item.icon + `<span>${item.label}</span>`;
-    btn.addEventListener('click', ()=>{ item.fn(); menu.classList.add('hidden'); });
-    menu.appendChild(btn);
-  });
-  menu.style.left = Math.min(e.clientX, window.innerWidth-180)+'px';
-  menu.style.top = Math.min(e.clientY, window.innerHeight-items.length*36-20)+'px';
-  menu.classList.remove('hidden');
-}
-document.addEventListener('click', ()=>document.getElementById('context-menu').classList.add('hidden'));
 
 // ============================================================
 // TOAST
@@ -3280,12 +3216,6 @@ function applyEQ() {
   player.setVolume(newVol);
 }
 
-// 설정 버튼에 EQ 추가
-const _origSettingsClick = document.getElementById('btn-settings').onclick;
-document.getElementById('btn-settings').addEventListener('click', (e) => {
-  // EQ 버튼을 설정 메뉴에 추가 (기존 핸들러 후에 처리)
-});
-
 // btn-speed 우클릭으로 EQ 열기
 document.getElementById('btn-speed').addEventListener('contextmenu', (e) => {
   e.preventDefault();
@@ -3382,11 +3312,6 @@ function handleEnded() {
   else if(repeatMode===1){ queueIndex=0; playTrack(queue[0]); }
   else { setPlayState(false); }
 }
-
-// 재생속도 - 재생 상태 변경 시 적용
-const _origOnReady = null;
-// YT PLAYING 상태 될 때 속도 유지
-const _ytStateOrig = window.onYouTubeIframeAPIReady;
 
 // ============================================================
 // 미니 플레이어 (풀스크린) — 모바일 스와이프 업
