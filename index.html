@@ -2254,12 +2254,34 @@ document.getElementById('confirm-new-pl').addEventListener('click', () => {
 });
 
 // ADD TO PLAYLIST MODAL
+// ============================================================
+// 플레이리스트 추가 모달 (단일 곡 / 전체 앨범 공용)
+// ============================================================
 let pendingAddTrack = null;
+let pendingAddTracks = null; // 전체 추가용
+let pendingAddAlbumTitle = '';
 let selectedPlaylistIdx = -1;
+let playlistModalMode = 'single'; // 'single' | 'bulk'
 
-// 앨범/여러 곡을 플레이리스트에 한번에 추가
+function openAddToPlaylist(track) {
+  pendingAddTrack = track;
+  pendingAddTracks = null;
+  playlistModalMode = 'single';
+  selectedPlaylistIdx = -1;
+  _openPlaylistModal('플레이리스트에 추가');
+}
+
 function openAddAllToPlaylist(tracks, albumTitle) {
-  let selectedIdx = -1;
+  pendingAddTrack = null;
+  pendingAddTracks = tracks;
+  pendingAddAlbumTitle = albumTitle;
+  playlistModalMode = 'bulk';
+  selectedPlaylistIdx = -1;
+  _openPlaylistModal(`📋 "${albumTitle}" 전체 추가`);
+}
+
+function _openPlaylistModal(title) {
+  document.querySelector('#modal-add-to-playlist h3').textContent = title;
   const el = document.getElementById('playlist-select-list');
   el.innerHTML = '';
 
@@ -2268,131 +2290,100 @@ function openAddAllToPlaylist(tracks, albumTitle) {
   }
 
   playlists.forEach((pl, i) => {
-    // 중복 곡 수 계산
-    const dupCount = tracks.filter(t => pl.tracks.some(p => p.videoId === t.videoId)).length;
-    const newCount = tracks.length - dupCount;
     const div = document.createElement('div');
     div.className = 'playlist-option';
-    div.innerHTML = `
-      <span class="pl-emoji">${pl.emoji}</span>
-      <span class="pl-name" style="flex:1">${escHtml(pl.name)}</span>
-      <span style="font-size:10px;color:var(--text3);flex-shrink:0">
-        ${dupCount > 0 ? `<span style="color:var(--accent2)">${dupCount}곡 중복</span> · ` : ''}+${newCount}곡
-      </span>`;
-    div.addEventListener('click', () => {
-      document.querySelectorAll('.playlist-option').forEach(o => o.classList.remove('selected'));
-      div.classList.add('selected');
-      selectedIdx = i;
-      const confirmBtn = document.getElementById('confirm-add-pl');
-      if(dupCount > 0) {
-        confirmBtn.textContent = `추가 (중복 ${dupCount}곡 포함)`;
-        confirmBtn.style.background = 'var(--accent2)';
-      } else {
-        confirmBtn.textContent = `${newCount}곡 추가`;
-        confirmBtn.style.background = 'var(--accent)';
-      }
-    });
+
+    if(playlistModalMode === 'bulk') {
+      const dupCount = pendingAddTracks.filter(t => pl.tracks.some(p => p.videoId === t.videoId)).length;
+      const newCount = pendingAddTracks.length - dupCount;
+      div.innerHTML = `
+        <span class="pl-emoji">${pl.emoji}</span>
+        <span class="pl-name" style="flex:1">${escHtml(pl.name)}</span>
+        <span style="font-size:10px;color:var(--text3);flex-shrink:0">
+          ${dupCount > 0 ? `<span style="color:var(--accent2)">${dupCount}중복</span> · ` : ''}+${newCount}곡
+        </span>`;
+      div.addEventListener('click', () => {
+        document.querySelectorAll('.playlist-option').forEach(o=>o.classList.remove('selected'));
+        div.classList.add('selected');
+        selectedPlaylistIdx = i;
+        const btn = document.getElementById('confirm-add-pl');
+        btn.textContent = dupCount > 0 ? `${newCount}곡 추가 (중복 ${dupCount}곡 제외)` : `${newCount}곡 추가`;
+        btn.style.background = 'var(--accent)';
+      });
+    } else {
+      const isDuplicate = pl.tracks.some(t => t.videoId === pendingAddTrack.videoId);
+      div.innerHTML = `
+        <span class="pl-emoji">${pl.emoji}</span>
+        <span class="pl-name" style="flex:1">${escHtml(pl.name)}</span>
+        ${isDuplicate
+          ? `<span style="font-size:10px;color:var(--accent2);background:rgba(167,139,250,0.15);padding:2px 7px;border-radius:100px;flex-shrink:0">이미 추가됨</span>`
+          : `<span style="font-size:11px;color:var(--text3);flex-shrink:0">${pl.tracks.length}곡</span>`}`;
+      div.addEventListener('click', () => {
+        document.querySelectorAll('.playlist-option').forEach(o=>o.classList.remove('selected'));
+        div.classList.add('selected');
+        selectedPlaylistIdx = i;
+        const btn = document.getElementById('confirm-add-pl');
+        btn.textContent = isDuplicate ? '그래도 추가' : '추가';
+        btn.style.background = isDuplicate ? 'var(--accent2)' : 'var(--accent)';
+      });
+    }
     el.appendChild(div);
   });
 
-  // 모달 제목 변경
-  document.querySelector('#modal-add-to-playlist h3').textContent = `📋 "${albumTitle}" 전체 추가`;
-  document.getElementById('confirm-add-pl').textContent = '추가';
-  document.getElementById('confirm-add-pl').style.background = 'var(--accent)';
+  // 버튼 초기화
+  const btn = document.getElementById('confirm-add-pl');
+  btn.textContent = '추가';
+  btn.style.background = 'var(--accent)';
+  document.getElementById('modal-add-to-playlist').classList.remove('hidden');
+}
 
-  // confirm 버튼 임시 교체
-  const confirmBtn = document.getElementById('confirm-add-pl');
-  const newConfirm = confirmBtn.cloneNode(true);
-  confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
+document.getElementById('close-modal-atp').addEventListener('click', _closePlaylistModal);
+document.getElementById('cancel-add-pl').addEventListener('click', _closePlaylistModal);
 
-  newConfirm.addEventListener('click', () => {
-    if(selectedIdx < 0) return;
-    const pl = playlists[selectedIdx];
+function _closePlaylistModal() {
+  document.getElementById('modal-add-to-playlist').classList.add('hidden');
+  document.querySelector('#modal-add-to-playlist h3').textContent = '플레이리스트에 추가';
+  pendingAddTrack = null;
+  pendingAddTracks = null;
+  selectedPlaylistIdx = -1;
+  playlistModalMode = 'single';
+}
+
+document.getElementById('confirm-add-pl').addEventListener('click', () => {
+  if(selectedPlaylistIdx < 0) { showToast('플레이리스트를 선택해주세요'); return; }
+  const pl = playlists[selectedPlaylistIdx];
+
+  if(playlistModalMode === 'bulk') {
+    // 전체 앨범 추가
+    if(!pendingAddTracks?.length) return;
     let added = 0, skipped = 0;
-    tracks.forEach(t => {
+    pendingAddTracks.forEach(t => {
       if(pl.tracks.some(p => p.videoId === t.videoId)) { skipped++; return; }
       pl.tracks.push({...t});
       added++;
     });
     savePlaylists();
     renderPlaylistNav();
-    document.getElementById('modal-add-to-playlist').classList.add('hidden');
-    document.querySelector('#modal-add-to-playlist h3').textContent = '플레이리스트에 추가'; // 원복
+    _closePlaylistModal();
     showToast(`"${pl.name}"에 ${added}곡 추가됨${skipped ? ` (중복 ${skipped}곡 제외)` : ''}`);
-  });
 
-  document.getElementById('cancel-add-pl').onclick = () => {
-    document.getElementById('modal-add-to-playlist').classList.add('hidden');
-    document.querySelector('#modal-add-to-playlist h3').textContent = '플레이리스트에 추가'; // 원복
-  };
-
-  document.getElementById('modal-add-to-playlist').classList.remove('hidden');
-}
-
-// 단일 곡 추가 (기존 함수)
-function openAddToPlaylist(track) {
-  pendingAddTrack = track;
-  selectedPlaylistIdx = -1;
-  const el = document.getElementById('playlist-select-list');
-  el.innerHTML = '';
-  if(!playlists.length){
-    el.innerHTML = '<div style="color:var(--text3);font-size:13px">플레이리스트를 먼저 만들어주세요</div>';
+  } else {
+    // 단일 곡 추가
+    if(!pendingAddTrack) return;
+    const isDuplicate = pl.tracks.some(t => t.videoId === pendingAddTrack.videoId);
+    const btn = document.getElementById('confirm-add-pl');
+    if(isDuplicate && btn.textContent !== '그래도 추가') {
+      btn.textContent = '그래도 추가';
+      btn.style.background = 'var(--accent2)';
+      showToast(`"${pl.name}"에 이미 있어요. 그래도 추가하려면 다시 누르세요`);
+      return;
+    }
+    pl.tracks.push({...pendingAddTrack});
+    savePlaylists();
+    renderPlaylistNav();
+    _closePlaylistModal();
+    showToast(isDuplicate ? `"${pl.name}"에 중복 추가됐습니다` : `"${pl.name}"에 추가됐습니다`);
   }
-  playlists.forEach((pl,i) => {
-    const isDuplicate = pl.tracks.some(t => t.videoId === track.videoId);
-    const div = document.createElement('div');
-    div.className = 'playlist-option';
-    div.style.position = 'relative';
-    div.innerHTML = `
-      <span class="pl-emoji">${pl.emoji}</span>
-      <span class="pl-name" style="flex:1">${escHtml(pl.name)}</span>
-      ${isDuplicate
-        ? `<span style="font-size:10px;color:var(--accent2);background:rgba(167,139,250,0.15);padding:2px 7px;border-radius:100px;flex-shrink:0">이미 추가됨</span>`
-        : `<span style="font-size:11px;color:var(--text3);flex-shrink:0">${pl.tracks.length}곡</span>`
-      }`;
-    div.addEventListener('click', () => {
-      document.querySelectorAll('.playlist-option').forEach(o=>o.classList.remove('selected'));
-      div.classList.add('selected');
-      selectedPlaylistIdx = i;
-      // 중복 여부에 따라 확인 버튼 텍스트 변경
-      const confirmBtn = document.getElementById('confirm-add-pl');
-      if(isDuplicate) {
-        confirmBtn.textContent = '그래도 추가';
-        confirmBtn.style.background = 'var(--accent2)';
-      } else {
-        confirmBtn.textContent = '추가';
-        confirmBtn.style.background = 'var(--accent)';
-      }
-    });
-    el.appendChild(div);
-  });
-  // 버튼 초기화
-  const confirmBtn = document.getElementById('confirm-add-pl');
-  confirmBtn.textContent = '추가';
-  confirmBtn.style.background = 'var(--accent)';
-  document.getElementById('modal-add-to-playlist').classList.remove('hidden');
-}
-
-document.getElementById('close-modal-atp').addEventListener('click', ()=>document.getElementById('modal-add-to-playlist').classList.add('hidden'));
-document.getElementById('cancel-add-pl').addEventListener('click', ()=>document.getElementById('modal-add-to-playlist').classList.add('hidden'));
-document.getElementById('confirm-add-pl').addEventListener('click', () => {
-  if(selectedPlaylistIdx<0||!pendingAddTrack) return;
-  const pl = playlists[selectedPlaylistIdx];
-  const isDuplicate = pl.tracks.some(t=>t.videoId===pendingAddTrack.videoId);
-
-  if(isDuplicate && document.getElementById('confirm-add-pl').textContent !== '그래도 추가') {
-    // 첫 클릭에서 중복 감지 → 확인 요청
-    document.getElementById('confirm-add-pl').textContent = '그래도 추가';
-    document.getElementById('confirm-add-pl').style.background = 'var(--accent2)';
-    showToast(`"${pl.name}"에 이미 있는 곡이에요. 그래도 추가하려면 다시 누르세요`);
-    return;
-  }
-
-  pl.tracks.push({...pendingAddTrack});
-  savePlaylists();
-  renderPlaylistNav();
-  document.getElementById('modal-add-to-playlist').classList.add('hidden');
-  showToast(isDuplicate ? `"${pl.name}"에 중복 추가됐습니다` : `"${pl.name}"에 추가됐습니다`);
 });
 
 // ============================================================
