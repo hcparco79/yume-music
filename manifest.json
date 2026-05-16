@@ -2,7 +2,8 @@
   "name": "YUME — YouTube Music Player",
   "short_name": "YUME",
   "description": "YouTube 기반 음악 플레이어",
-  "start_url": "/",
+  "start_url": "/yume-music/",
+  "scope": "/yume-music/",
   "display": "standalone",
   "background_color": "#0a0a0f",
   "theme_color": "#0a0a0f",
@@ -36,14 +37,14 @@
       "name": "검색",
       "short_name": "검색",
       "description": "음악 검색",
-      "url": "/?action=search",
+      "url": "/yume-music/?action=search",
       "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "플레이리스트",
       "short_name": "플레이리스트",
       "description": "내 플레이리스트",
-      "url": "/?action=playlists",
+      "url": "/yume-music/?action=playlists",
       "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
     }
   ]
