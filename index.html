@@ -1464,6 +1464,8 @@ function setPlayState(playing) {
   if(fspPauseIcon) fspPauseIcon.style.display = playing ? 'block' : 'none';
   // PiP 동기화
   if(typeof pipVisible !== 'undefined' && pipVisible) updatePipPlayState();
+  // 백그라운드 오디오 연동
+  if(typeof window._bgAudioSetPlayState === 'function') window._bgAudioSetPlayState(playing);
   renderQueueList();
 }
 
@@ -4174,17 +4176,21 @@ let pipDragOffsetX = 0, pipDragOffsetY = 0;
 
 const pipWidget = document.getElementById('pip-widget');
 
+let pipEnabled = false; // PiP 활성화 여부 (설정에서 켜고 끔)
+
 function showPip() {
   if(!currentTrack) { showToast('먼저 곡을 재생해주세요'); return; }
+  pipEnabled = true;
   pipVisible = true;
-  pipWidget.style.display = 'block';
-  updatePip();
-  showToast('미니 플레이어 켜짐');
+  // 포그라운드에서는 바로 표시 안 함 — 백그라운드 전환 시 자동 표시
+  showToast('🪟 미니 플레이어 켜짐 — 다른 앱으로 전환하면 표시됩니다');
 }
 
 function hidePip() {
+  pipEnabled = false;
   pipVisible = false;
   pipWidget.style.display = 'none';
+  showToast('미니 플레이어 꺼짐');
 }
 
 function updatePip() {
@@ -4307,6 +4313,111 @@ document.getElementById('btn-theme').addEventListener('click', () => {
 applyTheme(currentTheme);
 
 // 설정 메뉴에도 테마 항목 추가는 버튼으로 충분하므로 생략
+
+// ============================================================
+// 백그라운드 재생 유지 (무음 오디오 컨텍스트 트릭)
+// ============================================================
+let bgAudioCtx = null;
+let bgSilentSource = null;
+let bgKeepAliveInterval = null;
+
+function initBackgroundAudio() {
+  try {
+    bgAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // 무음 버퍼 생성 (0.1초짜리 묵음)
+    function createSilentBuffer() {
+      const buffer = bgAudioCtx.createBuffer(1, bgAudioCtx.sampleRate * 0.1, bgAudioCtx.sampleRate);
+      const source = bgAudioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(bgAudioCtx.destination);
+      source.loop = true;
+      source.start();
+      return source;
+    }
+
+    // 재생 시작될 때 오디오 컨텍스트 활성화
+    function activateBgAudio() {
+      if(bgAudioCtx.state === 'suspended') {
+        bgAudioCtx.resume().then(() => {
+          if(!bgSilentSource) {
+            bgSilentSource = createSilentBuffer();
+          }
+        });
+      } else if(!bgSilentSource) {
+        bgSilentSource = createSilentBuffer();
+      }
+    }
+
+    // 재생 중지될 때 오디오 컨텍스트 해제 (배터리 절약)
+    function deactivateBgAudio() {
+      if(bgSilentSource) {
+        try { bgSilentSource.stop(); } catch {}
+        bgSilentSource = null;
+      }
+    }
+
+    // visibilitychange 이벤트로 백그라운드 감지
+    document.addEventListener('visibilitychange', () => {
+      if(document.hidden) {
+        // 백그라운드 진입
+        if(isPlaying) {
+          activateBgAudio();
+          bgKeepAliveInterval = setInterval(() => {
+            if(bgAudioCtx.state === 'suspended') bgAudioCtx.resume();
+          }, 5000);
+        }
+        // PiP 활성화 상태면 백그라운드에서 표시
+        if(pipEnabled && currentTrack) {
+          pipVisible = true;
+          pipWidget.style.display = 'block';
+          updatePip();
+        }
+
+      } else {
+        // 포그라운드 복귀
+        clearInterval(bgKeepAliveInterval);
+        deactivateBgAudio();
+
+        // PiP 포그라운드에서 숨김
+        pipWidget.style.display = 'none';
+
+        // YT 플레이어 재생 복구
+        setTimeout(() => {
+          if(isPlaying && player && playerReady) {
+            try {
+              const state = player.getPlayerState();
+              if(state === 2 || state === -1) {
+                player.playVideo();
+                showToast('▶ 재생 재개');
+              }
+            } catch {}
+          }
+        }, 500);
+      }
+    });
+
+    // 재생 상태 변경 시 연동
+    const _origSetPlayState2 = setPlayState;
+    window._bgAudioSetPlayState = function(playing) {
+      if(playing) activateBgAudio();
+      else deactivateBgAudio();
+    };
+
+    console.log('[BG Audio] 초기화 완료');
+  } catch(e) {
+    console.warn('[BG Audio] 초기화 실패:', e);
+  }
+}
+
+// 첫 사용자 인터랙션 후 초기화 (브라우저 정책상 필수)
+function onFirstInteraction() {
+  initBackgroundAudio();
+  document.removeEventListener('touchstart', onFirstInteraction);
+  document.removeEventListener('click', onFirstInteraction);
+}
+document.addEventListener('touchstart', onFirstInteraction, {once:true, passive:true});
+document.addEventListener('click', onFirstInteraction, {once:true});
 
 // ============================================================
 // 오프라인 상태 감지
