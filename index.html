@@ -1591,7 +1591,7 @@ document.getElementById('btn-settings').addEventListener('click', (e) => {
   menu.innerHTML = '';
   const items = [
     { label:'📲 앱으로 설치', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><path d="M12 2v13"/><path d="m5 9 7 7 7-7"/><path d="M5 22h14"/></svg>', fn: triggerPWAInstall },
-    { label: pipVisible ? '🪟 미니 플레이어 끄기' : '🪟 미니 플레이어', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>', fn: ()=>{ pipVisible ? hidePip() : showPip(); } },
+    { label: (pipEnabled ? '🪟 미니 플레이어 끄기' : '🪟 미니 플레이어 + 백그라운드'), icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>', fn:()=>{ pipEnabled ? hidePip() : showPip(); } },
     { label:'🎛 이퀄라이저', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>', fn: showEQModal },
     { label:'데이터 백업 (JSON 저장)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>', fn: exportData },
     { label:'백업 복원 (JSON 불러오기)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>', fn: importData },
@@ -4176,21 +4176,22 @@ let pipDragOffsetX = 0, pipDragOffsetY = 0;
 
 const pipWidget = document.getElementById('pip-widget');
 
-let pipEnabled = false; // PiP 활성화 여부 (설정에서 켜고 끔)
+let pipEnabled = false;
 
 function showPip() {
   if(!currentTrack) { showToast('먼저 곡을 재생해주세요'); return; }
   pipEnabled = true;
-  pipVisible = true;
-  // 포그라운드에서는 바로 표시 안 함 — 백그라운드 전환 시 자동 표시
-  showToast('🪟 미니 플레이어 켜짐 — 다른 앱으로 전환하면 표시됩니다');
+  bgActive = true; // 백그라운드 오디오도 함께 활성화
+  // 포그라운드에서는 숨김 — 백그라운드 전환 시 자동 표시
+  showToast('🪟 미니 플레이어 ON — 다른 앱으로 전환하면 표시돼요');
 }
 
 function hidePip() {
   pipEnabled = false;
+  bgActive = false;
   pipVisible = false;
   pipWidget.style.display = 'none';
-  showToast('미니 플레이어 꺼짐');
+  showToast('미니 플레이어 OFF');
 }
 
 function updatePip() {
@@ -4315,41 +4316,45 @@ applyTheme(currentTheme);
 // 설정 메뉴에도 테마 항목 추가는 버튼으로 충분하므로 생략
 
 // ============================================================
-// 백그라운드 재생 유지 (무음 오디오 컨텍스트 트릭)
+// 백그라운드 재생 유지 (개선된 버전)
 // ============================================================
 let bgAudioCtx = null;
 let bgSilentSource = null;
 let bgKeepAliveInterval = null;
+let bgActive = false;
 
 function initBackgroundAudio() {
   try {
     bgAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    // 무음 버퍼 생성 (0.1초짜리 묵음)
+    // 충분히 긴 무음 버퍼 생성 (30초) + 루프
     function createSilentBuffer() {
-      const buffer = bgAudioCtx.createBuffer(1, bgAudioCtx.sampleRate * 0.1, bgAudioCtx.sampleRate);
+      const duration = 30; // 30초 버퍼
+      const buffer = bgAudioCtx.createBuffer(1, bgAudioCtx.sampleRate * duration, bgAudioCtx.sampleRate);
+      // 버퍼는 기본값이 0(무음)이므로 별도 채우기 불필요
       const source = bgAudioCtx.createBufferSource();
       source.buffer = buffer;
-      source.connect(bgAudioCtx.destination);
       source.loop = true;
+      // GainNode로 완전 무음 처리
+      const gainNode = bgAudioCtx.createGain();
+      gainNode.gain.value = 0.001; // 완전 0이면 브라우저가 최적화로 끊을 수 있어서 극소량 유지
+      source.connect(gainNode);
+      gainNode.connect(bgAudioCtx.destination);
       source.start();
       return source;
     }
 
-    // 재생 시작될 때 오디오 컨텍스트 활성화
     function activateBgAudio() {
+      if(!bgActive) return;
       if(bgAudioCtx.state === 'suspended') {
         bgAudioCtx.resume().then(() => {
-          if(!bgSilentSource) {
-            bgSilentSource = createSilentBuffer();
-          }
+          if(!bgSilentSource) bgSilentSource = createSilentBuffer();
         });
       } else if(!bgSilentSource) {
         bgSilentSource = createSilentBuffer();
       }
     }
 
-    // 재생 중지될 때 오디오 컨텍스트 해제 (배터리 절약)
     function deactivateBgAudio() {
       if(bgSilentSource) {
         try { bgSilentSource.stop(); } catch {}
@@ -4357,32 +4362,41 @@ function initBackgroundAudio() {
       }
     }
 
-    // visibilitychange 이벤트로 백그라운드 감지
+    // visibilitychange 이벤트
     document.addEventListener('visibilitychange', () => {
       if(document.hidden) {
         // 백그라운드 진입
-        if(isPlaying) {
+        if(isPlaying && bgActive) {
           activateBgAudio();
+          // 3초마다 컨텍스트 상태 체크 및 복구
+          clearInterval(bgKeepAliveInterval);
           bgKeepAliveInterval = setInterval(() => {
-            if(bgAudioCtx.state === 'suspended') bgAudioCtx.resume();
-          }, 5000);
+            if(!bgAudioCtx) return;
+            if(bgAudioCtx.state === 'suspended') {
+              bgAudioCtx.resume().catch(()=>{});
+            }
+            // YT 플레이어도 체크
+            if(isPlaying && player && playerReady) {
+              try {
+                const state = player.getPlayerState();
+                if(state === 2) player.playVideo(); // 일시정지 상태면 재개
+              } catch {}
+            }
+          }, 3000);
         }
-        // PiP 활성화 상태면 백그라운드에서 표시
-        if(pipEnabled && currentTrack) {
+        // PiP 표시 (활성화된 경우)
+        if(pipEnabled && currentTrack && isPlaying) {
           pipVisible = true;
           pipWidget.style.display = 'block';
           updatePip();
         }
-
       } else {
         // 포그라운드 복귀
         clearInterval(bgKeepAliveInterval);
         deactivateBgAudio();
-
-        // PiP 포그라운드에서 숨김
+        // PiP 숨김
         pipWidget.style.display = 'none';
-
-        // YT 플레이어 재생 복구
+        // 재생 복구
         setTimeout(() => {
           if(isPlaying && player && playerReady) {
             try {
@@ -4393,16 +4407,22 @@ function initBackgroundAudio() {
               }
             } catch {}
           }
-        }, 500);
+        }, 300);
       }
     });
 
-    // 재생 상태 변경 시 연동
-    const _origSetPlayState2 = setPlayState;
+    // pagehide 이벤트 (앱 전환 시 더 확실하게 감지)
+    window.addEventListener('pagehide', () => {
+      if(isPlaying && bgActive) activateBgAudio();
+    });
+
     window._bgAudioSetPlayState = function(playing) {
-      if(playing) activateBgAudio();
-      else deactivateBgAudio();
+      if(playing && bgActive) activateBgAudio();
+      else if(!playing) deactivateBgAudio();
     };
+
+    window._bgAudioActivate = activateBgAudio;
+    window._bgAudioDeactivate = deactivateBgAudio;
 
     console.log('[BG Audio] 초기화 완료');
   } catch(e) {
@@ -4410,9 +4430,10 @@ function initBackgroundAudio() {
   }
 }
 
-// 첫 사용자 인터랙션 후 초기화 (브라우저 정책상 필수)
+// 첫 인터랙션 후 초기화
 function onFirstInteraction() {
   initBackgroundAudio();
+  // 재생 시작하면 바로 bgActive 활성화
   document.removeEventListener('touchstart', onFirstInteraction);
   document.removeEventListener('click', onFirstInteraction);
 }
