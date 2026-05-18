@@ -324,80 +324,39 @@ input[type=range].vol-slider::-webkit-slider-thumb:hover{background:var(--accent
 .artist-name{font-size:14px;font-weight:500}
 .artist-sub{font-size:12px;color:var(--text3);margin-top:2px}
 .artist-play-btn{margin-left:auto;background:var(--accent);border:none;border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;color:#000;font-size:14px}
-/* PiP 위젯 미니 플레이어 */
+/* ── PiP 미니 플레이어 ── */
 #pip-widget{
-  position:fixed;
-  bottom:100px;right:16px;
-  width:240px;
-  background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:14px;
-  box-shadow:0 8px 32px rgba(0,0,0,0.4);
-  z-index:800;
-  overflow:hidden;
-  cursor:move;
-  user-select:none;
-  -webkit-user-select:none;
+  display:none;position:fixed;bottom:110px;right:14px;
+  width:236px;background:var(--surface);
+  border:1px solid var(--border);border-radius:14px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.45);
+  z-index:900;overflow:hidden;cursor:move;
+  user-select:none;-webkit-user-select:none;
 }
-#pip-drag-handle{
-  position:absolute;top:0;left:0;right:0;height:24px;
-  cursor:move;z-index:1;
+#pip-widget.visible{display:block}
+#pip-handle{
+  position:absolute;top:6px;left:50%;transform:translateX(-50%);
+  cursor:move;padding:4px 12px;z-index:1;
 }
-#pip-widget:hover #pip-close{opacity:1}
-#pip-thumb{
-  width:100%;height:100px;object-fit:cover;display:block;
-  pointer-events:none;
-}
-#pip-info{
-  padding:8px 10px 4px;
-  position:relative;
-}
-#pip-title{
-  font-size:12px;font-weight:600;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  color:var(--text);
-}
+#pip-art{width:100%;height:96px;object-fit:cover;display:block;pointer-events:none}
+#pip-meta{padding:8px 10px 2px}
+#pip-title{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #pip-artist{font-size:11px;color:var(--text3);margin-top:1px}
-#pip-controls{
-  display:flex;align-items:center;justify-content:center;
-  gap:4px;padding:4px 10px 8px;
-}
-#pip-controls button{
-  background:none;border:none;cursor:pointer;
-  color:var(--text2);padding:6px;border-radius:50%;
-  display:flex;align-items:center;transition:all .15s;
-}
-#pip-controls button:hover{color:var(--text);background:var(--surface2)}
-#pip-play{
-  width:32px;height:32px;border-radius:50% !important;
-  background:var(--accent) !important;color:#000 !important;
-}
-#pip-play:hover{background:var(--accent2) !important;color:#fff !important}
-#pip-close{
-  position:absolute;top:6px;right:6px;
-  background:rgba(0,0,0,0.5);border:none;cursor:pointer;
-  color:#fff;width:20px;height:20px;border-radius:50%;
-  font-size:10px;display:flex;align-items:center;justify-content:center;
-  opacity:0;transition:opacity .2s;z-index:2;
-}
-#pip-progress{
-  height:2px;background:var(--surface3);
-}
-#pip-progress-fill{
-  height:100%;background:var(--accent);width:0%;
-  transition:width .5s linear;
-}
-/* 모바일에서 PiP 위치 조정 */
+#pip-btns{display:flex;align-items:center;justify-content:center;gap:4px;padding:4px 10px 8px}
+#pip-btns button{background:none;border:none;cursor:pointer;color:var(--text2);padding:6px;border-radius:50%;display:flex;align-items:center;transition:all .15s}
+#pip-btns button:hover{color:var(--text);background:var(--surface2)}
+#pip-play-btn{width:34px;height:34px;border-radius:50% !important;background:var(--accent) !important;color:#000 !important}
+#pip-play-btn:hover{background:var(--accent2) !important;color:#fff !important}
+#pip-x{position:absolute;top:5px;right:5px;background:rgba(0,0,0,0.55);border:none;cursor:pointer;color:#fff;width:20px;height:20px;border-radius:50%;font-size:10px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;z-index:2}
+#pip-widget:hover #pip-x{opacity:1}
+#pip-prog{height:2px;background:var(--surface3)}
+#pip-prog-fill{height:100%;background:var(--accent);width:0%;transition:width .5s linear}
+#pip-widget.dragging{box-shadow:0 16px 48px rgba(0,0,0,0.55);transition:none}
 @media(max-width:600px){
-  #pip-widget{bottom:136px;right:10px;width:200px}
-  #pip-thumb{height:80px}
+  #pip-widget{bottom:132px;right:10px;width:200px}
+  #pip-art{height:80px}
 }
-
-/* 라이트 테마 play btn */
-[data-theme="light"] #pip-play{color:#fff !important}
-
-/* 드래그 중 */
-#pip-widget.dragging{transition:none;box-shadow:0 16px 48px rgba(0,0,0,0.5)}
+[data-theme="light"] #pip-play-btn{color:#fff !important}
 
 /* FULLSCREEN MINI PLAYER */
 #fullscreen-player{
@@ -1078,28 +1037,30 @@ input[type=range].vol-slider::-webkit-slider-thumb:hover{background:var(--accent
     가사
   </button>
 </div>
-<!-- PiP 위젯 미니 플레이어 -->
-<div id="pip-widget" style="display:none">
-  <div id="pip-drag-handle"></div>
-  <img id="pip-thumb" src="" alt="">
-  <div id="pip-info">
-    <div id="pip-title">재생 중인 곡 없음</div>
+<!-- PiP 미니 플레이어 (백그라운드 전환 시 표시) -->
+<div id="pip-widget">
+  <div id="pip-handle">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="opacity:0.4"><line x1="3" y1="8" x2="21" y2="8"/><line x1="3" y1="16" x2="21" y2="16"/></svg>
+  </div>
+  <img id="pip-art" src="" alt="">
+  <div id="pip-meta">
+    <div id="pip-title">—</div>
     <div id="pip-artist">—</div>
   </div>
-  <div id="pip-controls">
-    <button id="pip-prev" title="이전">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
+  <div id="pip-btns">
+    <button id="pip-prev">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
     </button>
-    <button id="pip-play" title="재생/정지">
-      <svg id="pip-play-icon" viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-      <svg id="pip-pause-icon" viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="display:none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+    <button id="pip-play-btn">
+      <svg id="pip-play-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      <svg id="pip-pause-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18" style="display:none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
     </button>
-    <button id="pip-next" title="다음">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+    <button id="pip-next">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
     </button>
   </div>
-  <button id="pip-close" title="닫기">✕</button>
-  <div id="pip-progress"><div id="pip-progress-fill"></div></div>
+  <button id="pip-x">✕</button>
+  <div id="pip-prog"><div id="pip-prog-fill"></div></div>
 </div>
 
 <div class="context-menu hidden" id="context-menu"></div>
@@ -1463,7 +1424,7 @@ function setPlayState(playing) {
   if(fspPlayIcon) fspPlayIcon.style.display = playing ? 'none' : 'block';
   if(fspPauseIcon) fspPauseIcon.style.display = playing ? 'block' : 'none';
   // PiP 동기화
-  if(typeof pipVisible !== 'undefined' && pipVisible) updatePipPlayState();
+  if(typeof pipVisible !== 'undefined' && pipVisible) refreshPipPlayState();
   // 백그라운드 오디오 연동
   if(typeof window._bgAudioSetPlayState === 'function') window._bgAudioSetPlayState(playing);
   renderQueueList();
@@ -1499,9 +1460,7 @@ function updateProgress() {
       document.getElementById('fsp-total').textContent = formatDuration(Math.floor(total));
     }
     // PiP 진행바 업데이트
-    if(typeof pipVisible !== 'undefined' && pipVisible) {
-      updatePipProgress(pct);
-    }
+    if(typeof pipVisible !== 'undefined' && pipVisible) refreshPipProgress(pct);
   } catch {}
 }
 
@@ -1591,7 +1550,7 @@ document.getElementById('btn-settings').addEventListener('click', (e) => {
   menu.innerHTML = '';
   const items = [
     { label:'📲 앱으로 설치', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><path d="M12 2v13"/><path d="m5 9 7 7 7-7"/><path d="M5 22h14"/></svg>', fn: triggerPWAInstall },
-    { label: (pipEnabled ? '🪟 미니 플레이어 끄기' : '🪟 미니 플레이어 + 백그라운드'), icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>', fn:()=>{ pipEnabled ? hidePip() : showPip(); } },
+    { label: pipEnabled ? '🪟 미니 플레이어 끄기' : '🪟 미니 플레이어 + 백그라운드', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>', fn: ()=>{ pipEnabled ? hidePip() : showPip(); } },
     { label:'🎛 이퀄라이저', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>', fn: showEQModal },
     { label:'데이터 백업 (JSON 저장)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>', fn: exportData },
     { label:'백업 복원 (JSON 불러오기)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>', fn: importData },
@@ -3000,7 +2959,7 @@ function onTrackChanged(track) {
   const fspSpeedBtn = document.getElementById('fsp-speed-btn');
   if(fspSpeedBtn && typeof SPEEDS !== 'undefined') fspSpeedBtn.textContent = SPEEDS[currentSpeedIdx] + 'x';
   // PiP 갱신
-  if(typeof pipVisible !== 'undefined' && pipVisible) updatePip();
+  if(typeof pipVisible !== 'undefined' && pipVisible) refreshPipInfo();
 }
 
 // ============================================================
@@ -4168,122 +4127,6 @@ function renderStatsView() {
 }
 
 // ============================================================
-// PiP 위젯 미니 플레이어
-// ============================================================
-let pipVisible = false;
-let pipDragging = false;
-let pipDragOffsetX = 0, pipDragOffsetY = 0;
-
-const pipWidget = document.getElementById('pip-widget');
-
-let pipEnabled = false;
-
-function showPip() {
-  if(!currentTrack) { showToast('먼저 곡을 재생해주세요'); return; }
-  pipEnabled = true;
-  bgActive = true; // 백그라운드 오디오도 함께 활성화
-  // 포그라운드에서는 숨김 — 백그라운드 전환 시 자동 표시
-  showToast('🪟 미니 플레이어 ON — 다른 앱으로 전환하면 표시돼요');
-}
-
-function hidePip() {
-  pipEnabled = false;
-  bgActive = false;
-  pipVisible = false;
-  pipWidget.style.display = 'none';
-  showToast('미니 플레이어 OFF');
-}
-
-function updatePip() {
-  if(!currentTrack || !pipVisible) return;
-  const thumb = `https://i.ytimg.com/vi/${currentTrack.videoId}/mqdefault.jpg`;
-  document.getElementById('pip-thumb').src = thumb;
-  document.getElementById('pip-title').textContent = currentTrack.title;
-  document.getElementById('pip-artist').textContent = currentTrack.artist;
-  updatePipPlayState();
-}
-
-function updatePipPlayState() {
-  document.getElementById('pip-play-icon').style.display  = isPlaying ? 'none'  : 'block';
-  document.getElementById('pip-pause-icon').style.display = isPlaying ? 'block' : 'none';
-}
-
-// 컨트롤 버튼
-document.getElementById('pip-play').addEventListener('click', () => document.getElementById('btn-play-pause').click());
-document.getElementById('pip-prev').addEventListener('click', () => document.getElementById('btn-prev').click());
-document.getElementById('pip-next').addEventListener('click', () => document.getElementById('btn-next').click());
-document.getElementById('pip-close').addEventListener('click', hidePip);
-pipWidget.addEventListener('dblclick', () => {
-  hidePip();
-  openFullscreenPlayer();
-});
-
-// 진행바 업데이트 — updateProgress에 연동
-function updatePipProgress(pct) {
-  if(!pipVisible) return;
-  document.getElementById('pip-progress-fill').style.width = pct + '%';
-}
-
-// 드래그 이동 (마우스)
-pipWidget.addEventListener('mousedown', (e) => {
-  if(e.target.closest('button')) return;
-  pipDragging = true;
-  pipWidget.classList.add('dragging');
-  const rect = pipWidget.getBoundingClientRect();
-  pipDragOffsetX = e.clientX - rect.left;
-  pipDragOffsetY = e.clientY - rect.top;
-  e.preventDefault();
-});
-document.addEventListener('mousemove', (e) => {
-  if(!pipDragging) return;
-  movePip(e.clientX - pipDragOffsetX, e.clientY - pipDragOffsetY);
-});
-document.addEventListener('mouseup', () => {
-  if(pipDragging) { pipDragging = false; pipWidget.classList.remove('dragging'); snapPip(); }
-});
-
-// 드래그 이동 (터치)
-pipWidget.addEventListener('touchstart', (e) => {
-  if(e.target.closest('button')) return;
-  pipDragging = true;
-  const rect = pipWidget.getBoundingClientRect();
-  pipDragOffsetX = e.touches[0].clientX - rect.left;
-  pipDragOffsetY = e.touches[0].clientY - rect.top;
-}, {passive:true});
-pipWidget.addEventListener('touchmove', (e) => {
-  if(!pipDragging) return;
-  movePip(e.touches[0].clientX - pipDragOffsetX, e.touches[0].clientY - pipDragOffsetY);
-}, {passive:true});
-pipWidget.addEventListener('touchend', () => {
-  if(pipDragging) { pipDragging = false; snapPip(); }
-}, {passive:true});
-
-function movePip(x, y) {
-  const w = pipWidget.offsetWidth, h = pipWidget.offsetHeight;
-  const maxX = window.innerWidth - w, maxY = window.innerHeight - h;
-  pipWidget.style.left = Math.max(0, Math.min(x, maxX)) + 'px';
-  pipWidget.style.top  = Math.max(0, Math.min(y, maxY)) + 'px';
-  pipWidget.style.right = 'auto';
-  pipWidget.style.bottom = 'auto';
-}
-
-// 화면 모서리에 스냅
-function snapPip() {
-  const rect = pipWidget.getBoundingClientRect();
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
-  const snapX = cx < window.innerWidth / 2 ? 10 : window.innerWidth - rect.width - 10;
-  const snapY = cy < window.innerHeight / 2 ? 70 : window.innerHeight - rect.height - 130;
-  pipWidget.style.transition = 'left .2s,top .2s';
-  pipWidget.style.left = snapX + 'px';
-  pipWidget.style.top  = snapY + 'px';
-  pipWidget.style.right = 'auto';
-  pipWidget.style.bottom = 'auto';
-  setTimeout(() => pipWidget.style.transition = '', 200);
-}
-
-// 설정 메뉴에서 PiP 열기 연동 (설정 버튼에 추가)
-// ============================================================
 // 테마 전환 (다크 / 라이트)
 // ============================================================
 let currentTheme = loadData('yume_theme', 'dark');
@@ -4316,129 +4159,164 @@ applyTheme(currentTheme);
 // 설정 메뉴에도 테마 항목 추가는 버튼으로 충분하므로 생략
 
 // ============================================================
-// 백그라운드 재생 유지 (개선된 버전)
+// PiP 미니 플레이어 + 백그라운드 재생 (통합)
 // ============================================================
+const pipWidget = document.getElementById('pip-widget');
+let pipEnabled = false;
+let pipVisible = false;
 let bgAudioCtx = null;
 let bgSilentSource = null;
 let bgKeepAliveInterval = null;
 let bgActive = false;
+let pipDragging = false, pipDragOX = 0, pipDragOY = 0;
+
+function showPip() {
+  if(!currentTrack) { showToast('먼저 곡을 재생해주세요'); return; }
+  pipEnabled = true; bgActive = true;
+  showToast('🪟 미니 플레이어 ON — 다른 앱 전환 시 표시돼요');
+}
+function hidePip() {
+  pipEnabled = false; bgActive = false; pipVisible = false;
+  pipWidget.classList.remove('visible');
+  showToast('미니 플레이어 OFF');
+}
+function showPipWidget() {
+  if(!currentTrack) return;
+  pipVisible = true; pipWidget.classList.add('visible');
+  refreshPipInfo();
+}
+function hidePipWidget() {
+  pipVisible = false; pipWidget.classList.remove('visible');
+}
+function refreshPipInfo() {
+  if(!currentTrack) return;
+  document.getElementById('pip-art').src = `https://i.ytimg.com/vi/${currentTrack.videoId}/mqdefault.jpg`;
+  document.getElementById('pip-title').textContent = currentTrack.title;
+  document.getElementById('pip-artist').textContent = currentTrack.artist;
+  refreshPipPlayState();
+}
+function refreshPipPlayState() {
+  document.getElementById('pip-play-icon').style.display  = isPlaying ? 'none'  : 'block';
+  document.getElementById('pip-pause-icon').style.display = isPlaying ? 'block' : 'none';
+}
+function refreshPipProgress(pct) {
+  if(!pipVisible) return;
+  document.getElementById('pip-prog-fill').style.width = pct + '%';
+}
+
+// 컨트롤
+document.getElementById('pip-play-btn').addEventListener('click', () => document.getElementById('btn-play-pause').click());
+document.getElementById('pip-prev').addEventListener('click', () => document.getElementById('btn-prev').click());
+document.getElementById('pip-next').addEventListener('click', () => document.getElementById('btn-next').click());
+document.getElementById('pip-x').addEventListener('click', hidePip);
+pipWidget.addEventListener('dblclick', () => { hidePipWidget(); openFullscreenPlayer(); });
+
+// 드래그 마우스
+pipWidget.addEventListener('mousedown', (e) => {
+  if(e.target.closest('button')) return;
+  pipDragging = true; pipWidget.classList.add('dragging');
+  const r = pipWidget.getBoundingClientRect();
+  pipDragOX = e.clientX - r.left; pipDragOY = e.clientY - r.top; e.preventDefault();
+});
+document.addEventListener('mousemove', (e) => { if(pipDragging) movePip(e.clientX-pipDragOX, e.clientY-pipDragOY); });
+document.addEventListener('mouseup', () => { if(pipDragging){pipDragging=false;pipWidget.classList.remove('dragging');snapPip();} });
+
+// 드래그 터치
+pipWidget.addEventListener('touchstart', (e) => {
+  if(e.target.closest('button')) return;
+  pipDragging = true;
+  const r = pipWidget.getBoundingClientRect();
+  pipDragOX = e.touches[0].clientX-r.left; pipDragOY = e.touches[0].clientY-r.top;
+}, {passive:true});
+pipWidget.addEventListener('touchmove', (e) => { if(pipDragging) movePip(e.touches[0].clientX-pipDragOX, e.touches[0].clientY-pipDragOY); }, {passive:true});
+pipWidget.addEventListener('touchend', () => { if(pipDragging){pipDragging=false;snapPip();} }, {passive:true});
+
+function movePip(x, y) {
+  const mX=window.innerWidth-pipWidget.offsetWidth, mY=window.innerHeight-pipWidget.offsetHeight;
+  pipWidget.style.left=Math.max(0,Math.min(x,mX))+'px';
+  pipWidget.style.top=Math.max(0,Math.min(y,mY))+'px';
+  pipWidget.style.right='auto'; pipWidget.style.bottom='auto';
+}
+function snapPip() {
+  const r=pipWidget.getBoundingClientRect();
+  const sx=(r.left+r.width/2)<window.innerWidth/2?10:window.innerWidth-r.width-10;
+  const sy=(r.top+r.height/2)<window.innerHeight/2?70:window.innerHeight-r.height-130;
+  pipWidget.style.transition='left .2s,top .2s';
+  pipWidget.style.left=sx+'px'; pipWidget.style.top=sy+'px';
+  pipWidget.style.right='auto'; pipWidget.style.bottom='auto';
+  setTimeout(()=>pipWidget.style.transition='',200);
+}
 
 function initBackgroundAudio() {
   try {
     bgAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    // 충분히 긴 무음 버퍼 생성 (30초) + 루프
-    function createSilentBuffer() {
-      const duration = 30; // 30초 버퍼
-      const buffer = bgAudioCtx.createBuffer(1, bgAudioCtx.sampleRate * duration, bgAudioCtx.sampleRate);
-      // 버퍼는 기본값이 0(무음)이므로 별도 채우기 불필요
-      const source = bgAudioCtx.createBufferSource();
-      source.buffer = buffer;
-      source.loop = true;
-      // GainNode로 완전 무음 처리
-      const gainNode = bgAudioCtx.createGain();
-      gainNode.gain.value = 0.001; // 완전 0이면 브라우저가 최적화로 끊을 수 있어서 극소량 유지
-      source.connect(gainNode);
-      gainNode.connect(bgAudioCtx.destination);
-      source.start();
-      return source;
+    function createSilentLoop() {
+      const buf = bgAudioCtx.createBuffer(1, bgAudioCtx.sampleRate * 30, bgAudioCtx.sampleRate);
+      const data = buf.getChannelData(0);
+      for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1)*0.0001;
+      const src = bgAudioCtx.createBufferSource();
+      src.buffer = buf; src.loop = true;
+      const gain = bgAudioCtx.createGain();
+      gain.gain.value = 0.0001;
+      src.connect(gain); gain.connect(bgAudioCtx.destination);
+      src.start(); return src;
     }
 
-    function activateBgAudio() {
+    function activateBg() {
       if(!bgActive) return;
       if(bgAudioCtx.state === 'suspended') {
-        bgAudioCtx.resume().then(() => {
-          if(!bgSilentSource) bgSilentSource = createSilentBuffer();
-        });
+        bgAudioCtx.resume().then(() => { if(!bgSilentSource) bgSilentSource = createSilentLoop(); });
       } else if(!bgSilentSource) {
-        bgSilentSource = createSilentBuffer();
+        bgSilentSource = createSilentLoop();
       }
     }
-
-    function deactivateBgAudio() {
-      if(bgSilentSource) {
-        try { bgSilentSource.stop(); } catch {}
-        bgSilentSource = null;
-      }
+    function deactivateBg() {
+      if(bgSilentSource) { try { bgSilentSource.stop(); } catch {} bgSilentSource = null; }
     }
 
-    // visibilitychange 이벤트
     document.addEventListener('visibilitychange', () => {
       if(document.hidden) {
-        // 백그라운드 진입
         if(isPlaying && bgActive) {
-          activateBgAudio();
-          // 3초마다 컨텍스트 상태 체크 및 복구
+          activateBg();
           clearInterval(bgKeepAliveInterval);
           bgKeepAliveInterval = setInterval(() => {
-            if(!bgAudioCtx) return;
-            if(bgAudioCtx.state === 'suspended') {
-              bgAudioCtx.resume().catch(()=>{});
-            }
-            // YT 플레이어도 체크
+            if(bgAudioCtx?.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
             if(isPlaying && player && playerReady) {
-              try {
-                const state = player.getPlayerState();
-                if(state === 2) player.playVideo(); // 일시정지 상태면 재개
-              } catch {}
+              try { if(player.getPlayerState() === 2) player.playVideo(); } catch {}
             }
-          }, 3000);
+          }, 2000);
         }
-        // PiP 표시 (활성화된 경우)
-        if(pipEnabled && currentTrack && isPlaying) {
-          pipVisible = true;
-          pipWidget.style.display = 'block';
-          updatePip();
-        }
+        if(pipEnabled && currentTrack && isPlaying) showPipWidget();
       } else {
-        // 포그라운드 복귀
         clearInterval(bgKeepAliveInterval);
-        deactivateBgAudio();
-        // PiP 숨김
-        pipWidget.style.display = 'none';
-        // 재생 복구
+        deactivateBg();
+        hidePipWidget();
         setTimeout(() => {
           if(isPlaying && player && playerReady) {
             try {
-              const state = player.getPlayerState();
-              if(state === 2 || state === -1) {
-                player.playVideo();
-                showToast('▶ 재생 재개');
-              }
+              const s = player.getPlayerState();
+              if(s === 2 || s === -1) { player.playVideo(); showToast('▶ 재생 재개'); }
             } catch {}
           }
         }, 300);
       }
     });
 
-    // pagehide 이벤트 (앱 전환 시 더 확실하게 감지)
-    window.addEventListener('pagehide', () => {
-      if(isPlaying && bgActive) activateBgAudio();
-    });
-
-    window._bgAudioSetPlayState = function(playing) {
-      if(playing && bgActive) activateBgAudio();
-      else if(!playing) deactivateBgAudio();
-    };
-
-    window._bgAudioActivate = activateBgAudio;
-    window._bgAudioDeactivate = deactivateBgAudio;
-
-    console.log('[BG Audio] 초기화 완료');
-  } catch(e) {
-    console.warn('[BG Audio] 초기화 실패:', e);
-  }
+    window.addEventListener('pagehide', () => { if(isPlaying && bgActive) activateBg(); });
+    window._bgActivate = activateBg;
+    window._bgDeactivate = deactivateBg;
+    window._bgAudioSetPlayState = (p) => { if(p && bgActive) activateBg(); else if(!p) deactivateBg(); };
+    console.log('[BG] 초기화 완료');
+  } catch(e) { console.warn('[BG] 실패:', e); }
 }
 
-// 첫 인터랙션 후 초기화
-function onFirstInteraction() {
-  initBackgroundAudio();
-  // 재생 시작하면 바로 bgActive 활성화
-  document.removeEventListener('touchstart', onFirstInteraction);
-  document.removeEventListener('click', onFirstInteraction);
-}
-document.addEventListener('touchstart', onFirstInteraction, {once:true, passive:true});
-document.addEventListener('click', onFirstInteraction, {once:true});
+['touchstart','click'].forEach(ev =>
+  document.addEventListener(ev, function init() {
+    initBackgroundAudio();
+    document.removeEventListener(ev, init);
+  }, {once:true, passive:true})
+);
 
 // ============================================================
 // 오프라인 상태 감지
