@@ -1076,6 +1076,9 @@ let isPlaying = false, isShuffle = false, repeatMode = 0; // 0=off,1=all,2=one
 let progressInterval = null;
 let pendingVideoId = null;
 
+// 사용자가 직접 일시정지했는지 여부 (백그라운드 강제정지와 구분)
+let userPaused = false;
+
 window.onYouTubeIframeAPIReady = function() {
   player = new YT.Player('yt-player', {
     height:'1', width:'1',
@@ -1096,10 +1099,22 @@ window.onYouTubeIframeAPIReady = function() {
         const S = YT.PlayerState;
         if(e.data === S.PLAYING){
           setPlayState(true); startProgress();
-          // 재생속도 유지
+          userPaused = false;
           if(SPEEDS[currentSpeedIdx] !== 1) player.setPlaybackRate(SPEEDS[currentSpeedIdx]);
         }
-        else if(e.data === S.PAUSED){ setPlayState(false); stopProgress(); }
+        else if(e.data === S.PAUSED){
+          // 백그라운드에서 YouTube가 강제로 멈춘 경우 무시
+          if(document.hidden && !userPaused) {
+            // 백그라운드 강제 정지 → 재개 시도
+            setTimeout(() => {
+              if(!userPaused && player && playerReady) {
+                try { player.playVideo(); } catch {}
+              }
+            }, 500);
+          } else {
+            setPlayState(false); stopProgress();
+          }
+        }
         else if(e.data === S.ENDED){ handleEnded(); }
         else if(e.data === S.BUFFERING){}
       }
@@ -1493,7 +1508,13 @@ document.getElementById('np-progress-bar').addEventListener('click', function(e)
 // CONTROLS
 document.getElementById('btn-play-pause').addEventListener('click', () => {
   if(!player||!playerReady) return;
-  if(isPlaying) player.pauseVideo(); else player.playVideo();
+  if(isPlaying) {
+    userPaused = true;  // 사용자가 직접 멈춤
+    player.pauseVideo();
+  } else {
+    userPaused = false;
+    player.playVideo();
+  }
 });
 document.getElementById('btn-prev').addEventListener('click', () => {
   if(queueIndex > 0){ queueIndex--; playTrack(queue[queueIndex]); }
@@ -2427,9 +2448,9 @@ function updateMediaSession(track) {
 
     // 모든 액션 핸들러 등록
     const handlers = {
-      'play':         ()=>{ if(player&&playerReady) player.playVideo(); },
-      'pause':        ()=>{ if(player&&playerReady) player.pauseVideo(); },
-      'stop':         ()=>{ if(player&&playerReady) player.stopVideo(); setPlayState(false); },
+      'play':         ()=>{ userPaused=false; if(player&&playerReady) player.playVideo(); },
+      'pause':        ()=>{ userPaused=true;  if(player&&playerReady) player.pauseVideo(); },
+      'stop':         ()=>{ userPaused=true;  if(player&&playerReady) player.stopVideo(); setPlayState(false); },
       'nexttrack':    ()=>document.getElementById('btn-next').click(),
       'previoustrack':()=>document.getElementById('btn-prev').click(),
       'seekforward':  (d)=>{ if(player&&playerReady){ const t=player.getCurrentTime()||0; player.seekTo(t+(d?.seekOffset||10),true); }},
