@@ -1427,6 +1427,8 @@ function setPlayState(playing) {
   if(typeof pipVisible !== 'undefined' && pipVisible) refreshPipPlayState();
   // 백그라운드 오디오 연동
   if(typeof window._bgAudioSetPlayState === 'function') window._bgAudioSetPlayState(playing);
+  // Media Session 상태 동기화
+  if(typeof syncMediaSessionState === 'function') syncMediaSessionState(playing);
   renderQueueList();
 }
 
@@ -1461,6 +1463,16 @@ function updateProgress() {
     }
     // PiP 진행바 업데이트
     if(typeof pipVisible !== 'undefined' && pipVisible) refreshPipProgress(pct);
+    // Media Session 위치 업데이트 (잠금화면 진행바)
+    if('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession && total > 0) {
+      try {
+        navigator.mediaSession.setPositionState({
+          duration: total,
+          playbackRate: player.getPlaybackRate?.() || 1,
+          position: Math.min(curr, total)
+        });
+      } catch {}
+    }
   } catch {}
 }
 
@@ -2396,20 +2408,59 @@ function decodeHtml(s){ const t=document.createElement('textarea'); t.innerHTML=
 // ============================================================
 function updateMediaSession(track) {
   if(!('mediaSession' in navigator) || !track) return;
-  navigator.mediaSession.metadata = new MediaMetadata({
-    title: track.title,
-    artist: track.artist,
-    artwork: [{ src: `https://i.ytimg.com/vi/${track.videoId}/mqdefault.jpg`, sizes: '320x180', type: 'image/jpeg' }]
-  });
-  navigator.mediaSession.setActionHandler('play', ()=>{ if(player&&playerReady) player.playVideo(); });
-  navigator.mediaSession.setActionHandler('pause', ()=>{ if(player&&playerReady) player.pauseVideo(); });
-  navigator.mediaSession.setActionHandler('nexttrack', ()=>document.getElementById('btn-next').click());
-  navigator.mediaSession.setActionHandler('previoustrack', ()=>document.getElementById('btn-prev').click());
+  try {
+    // 여러 크기의 아트워크 제공 (광고차단 우회용 대안 포함)
+    const thumb = `https://i.ytimg.com/vi/${track.videoId}/mqdefault.jpg`;
+    const thumbHq = `https://i.ytimg.com/vi/${track.videoId}/hqdefault.jpg`;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: track.title,
+      artist: track.artist,
+      album: 'YUME',
+      artwork: [
+        { src: thumb,   sizes: '320x180', type: 'image/jpeg' },
+        { src: thumbHq, sizes: '480x360', type: 'image/jpeg' },
+      ]
+    });
+
+    // 재생 상태 업데이트 (잠금화면 컨트롤 표시의 핵심)
+    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+
+    // 모든 액션 핸들러 등록
+    const handlers = {
+      'play':         ()=>{ if(player&&playerReady) player.playVideo(); },
+      'pause':        ()=>{ if(player&&playerReady) player.pauseVideo(); },
+      'stop':         ()=>{ if(player&&playerReady) player.stopVideo(); setPlayState(false); },
+      'nexttrack':    ()=>document.getElementById('btn-next').click(),
+      'previoustrack':()=>document.getElementById('btn-prev').click(),
+      'seekforward':  (d)=>{ if(player&&playerReady){ const t=player.getCurrentTime()||0; player.seekTo(t+(d?.seekOffset||10),true); }},
+      'seekbackward': (d)=>{ if(player&&playerReady){ const t=player.getCurrentTime()||0; player.seekTo(Math.max(0,t-(d?.seekOffset||10)),true); }},
+    };
+    Object.entries(handlers).forEach(([action, handler]) => {
+      try { navigator.mediaSession.setActionHandler(action, handler); } catch {}
+    });
+
+    // 진행바 업데이트 (지원하는 브라우저에서 잠금화면에 표시)
+    if('setPositionState' in navigator.mediaSession && player && playerReady) {
+      try {
+        const duration = player.getDuration() || 0;
+        const position = player.getCurrentTime() || 0;
+        if(duration > 0) {
+          navigator.mediaSession.setPositionState({
+            duration,
+            playbackRate: player.getPlaybackRate?.() || 1,
+            position: Math.min(position, duration),
+          });
+        }
+      } catch {}
+    }
+  } catch(e) { console.warn('[MediaSession]', e); }
 }
 
-// Watch currentTrack changes for media session
-const origPlayTrack = playTrack;
-// (already integrated in playTrack)
+// 재생 상태 변경 시 Media Session 상태도 업데이트
+function syncMediaSessionState(playing) {
+  if(!('mediaSession' in navigator)) return;
+  try { navigator.mediaSession.playbackState = playing ? 'playing' : 'paused'; } catch {}
+}
 
 // ============================================================
 // MOBILE TAB BAR
@@ -4292,14 +4343,21 @@ function initBackgroundAudio() {
         clearInterval(bgKeepAliveInterval);
         deactivateBg();
         hidePipWidget();
-        setTimeout(() => {
-          if(isPlaying && player && playerReady) {
-            try {
-              const s = player.getPlayerState();
-              if(s === 2 || s === -1) { player.playVideo(); showToast('▶ 재생 재개'); }
-            } catch {}
-          }
-        }, 300);
+        // 여러 번 재시도 (YouTube가 늦게 응답할 수 있음)
+        if(isPlaying) {
+          [300, 800, 1500, 3000].forEach(delay => {
+            setTimeout(() => {
+              if(!isPlaying || !player || !playerReady) return;
+              try {
+                const s = player.getPlayerState();
+                if(s === 2 || s === -1 || s === 5) {
+                  player.playVideo();
+                  if(delay >= 800) showToast('▶ 재생 재개');
+                }
+              } catch {}
+            }, delay);
+          });
+        }
       }
     });
 
