@@ -4328,34 +4328,38 @@ function initBackgroundAudio() {
     bgAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
     function createSilentLoop() {
-      const buf = bgAudioCtx.createBuffer(1, bgAudioCtx.sampleRate * 30, bgAudioCtx.sampleRate);
+      const buf = bgAudioCtx.createBuffer(1, bgAudioCtx.sampleRate * 2, bgAudioCtx.sampleRate);
       const data = buf.getChannelData(0);
-      for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1)*0.003;
+      // 버퍼는 풀 진폭으로 채움 — gain 노드만으로 최종 음량 제어 (이중 감쇠 방지)
+      for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1);
       const src = bgAudioCtx.createBufferSource();
       src.buffer = buf; src.loop = true;
       const gain = bgAudioCtx.createGain();
-      gain.gain.value = 0.003;
+      gain.gain.value = 0.003; // ~-50dB: 귀에 안 들리지만 OS가 오디오 출력으로 인식
       src.connect(gain); gain.connect(bgAudioCtx.destination);
       src.start(); return src;
     }
 
     function activateBg() {
-      if(!bgActive) return;
-      if(bgAudioCtx.state === 'suspended') {
-        bgAudioCtx.resume().then(() => { if(!bgSilentSource) bgSilentSource = createSilentLoop(); });
-      } else if(!bgSilentSource) {
-        bgSilentSource = createSilentLoop();
-      }
+      if(bgAudioCtx.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
+      if(!bgSilentSource) bgSilentSource = createSilentLoop();
     }
     function deactivateBg() {
       if(bgSilentSource) { try { bgSilentSource.stop(); } catch {} bgSilentSource = null; }
     }
 
+    // ★ user gesture 컨텍스트(touchstart/click) 안에서 즉시 루프 시작
+    // Chrome은 백그라운드 전환 전에 이미 오디오를 출력 중인 AudioContext는 중단하지 않음
+    bgAudioCtx.resume().then(() => {
+      if(!bgSilentSource) bgSilentSource = createSilentLoop();
+    }).catch(()=>{});
+
     document.addEventListener('visibilitychange', () => {
       if(document.hidden) {
+        // 루프가 이미 실행 중이어야 하지만 혹시 suspended됐으면 복구
+        if(bgAudioCtx.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
+        if(!bgSilentSource) bgSilentSource = createSilentLoop();
         if(isPlaying) {
-          activateBg();
-          // 잠금화면 컨트롤 유지: playbackState를 명시적으로 'playing'으로 고정
           try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
           clearInterval(bgKeepAliveInterval);
           bgKeepAliveInterval = setInterval(() => {
@@ -4368,9 +4372,8 @@ function initBackgroundAudio() {
         if(pipEnabled && currentTrack && isPlaying) showPipWidget();
       } else {
         clearInterval(bgKeepAliveInterval);
-        deactivateBg();
         hidePipWidget();
-        // 여러 번 재시도 (YouTube가 늦게 응답할 수 있음)
+        // silent loop는 계속 유지 — 포그라운드 복귀 후 재생 시 user gesture 없이도 동작
         if(isPlaying) {
           [300, 800, 1500, 3000].forEach(delay => {
             setTimeout(() => {
@@ -4388,10 +4391,13 @@ function initBackgroundAudio() {
       }
     });
 
-    window.addEventListener('pagehide', () => { if(isPlaying) activateBg(); });
+    window.addEventListener('pagehide', () => {
+      if(bgAudioCtx.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
+    });
     window._bgActivate = activateBg;
     window._bgDeactivate = deactivateBg;
-    window._bgAudioSetPlayState = (p) => { if(p && bgActive) activateBg(); else if(!p) deactivateBg(); };
+    // 재생 시 루프 활성화; 일시정지 시에도 루프 유지 (재resume에 user gesture 불필요하게 유지)
+    window._bgAudioSetPlayState = (p) => { if(p) activateBg(); };
     console.log('[BG] 초기화 완료');
   } catch(e) { console.warn('[BG] 실패:', e); }
 }
