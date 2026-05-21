@@ -2465,15 +2465,18 @@ function updateMediaSession(track) {
       'play': () => {
         userPaused = false;
         bgPendingPlay = true; // 포그라운드 복귀 시 재개 트리거
-        try { navigator.mediaSession.playbackState = 'playing'; } catch {}
         if(document.hidden) {
           // 백그라운드: Piped/Invidious <audio> 스트림으로 즉시 재생 시도
           const started = startBgMusicAudio();
-          if(!started && currentTrack?.videoId) {
-            // URL 없으면 페치 후 재생 (prefetchBgStream 내부에서 hidden+playing 조건 시 자동 시작)
+          if(started) {
+            // play() 호출 성공 (then에서 mediaSession 업데이트)
+          } else if(currentTrack?.videoId) {
+            // URL 없으면 먼저 페치 → 완료 후 prefetchBgStream 내부에서 자동 시작
+            showToast('🔄 스트림 준비 중...');
             prefetchBgStream(currentTrack.videoId).catch(()=>{});
           }
         } else {
+          try { navigator.mediaSession.playbackState = 'playing'; } catch {}
           if(player && playerReady) try { player.playVideo(); } catch {}
         }
       },
@@ -4374,19 +4377,26 @@ function snapPip() {
 let bgMusicAudio = null;
 let bgMusicStreamUrl = null;
 let bgMusicVideoId  = null;
+let bgFetching = false; // 중복 fetch 방지 플래그
 
 const BG_STREAM_APIS = [
   id => `https://pipedapi.kavin.rocks/streams/${id}`,
+  id => `https://pipedapi-libre.kavin.rocks/streams/${id}`,
   id => `https://api.piped.privacydev.net/streams/${id}`,
   id => `https://piped.video/api/streams/${id}`,
+  id => `https://piped.adminforge.de/api/streams/${id}`,
   id => `https://inv.nadeko.net/api/v1/videos/${id}?fields=adaptiveFormats`,
   id => `https://invidious.nerdvpn.de/api/v1/videos/${id}?fields=adaptiveFormats`,
 ];
 
 async function prefetchBgStream(videoId) {
-  if(!videoId || (bgMusicVideoId === videoId && bgMusicStreamUrl)) return;
+  if(!videoId) return;
+  if(bgMusicVideoId === videoId && bgMusicStreamUrl) return; // 이미 URL 있음
+  if(bgFetching && bgMusicVideoId === videoId) return; // 이미 페치 중
+  bgFetching = true;
   bgMusicStreamUrl = null;
   bgMusicVideoId = videoId;
+  let found = false;
   for(const apiUrl of BG_STREAM_APIS) {
     try {
       const ctrl = new AbortController();
@@ -4397,25 +4407,39 @@ async function prefetchBgStream(videoId) {
       const data = await res.json();
       // Piped: data.audioStreams / Invidious: data.adaptiveFormats
       const streams = (data.audioStreams || data.adaptiveFormats || [])
-        .filter(s => s.url && (s.mimeType || s.type || '').startsWith('audio'))
+        .filter(s => s.url && (s.mimeType || s.type || '').includes('audio'))
         .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
       if(streams[0]?.url) {
         bgMusicStreamUrl = streams[0].url;
-        // 이미 백그라운드 중이면 즉시 교체 재생
-        if(document.hidden && isPlaying && !userPaused) startBgMusicAudio();
-        return;
+        found = true;
+        // 이미 백그라운드 상태이면 즉시 재생 시작
+        if(document.hidden && (isPlaying || bgPendingPlay) && !userPaused) {
+          startBgMusicAudio();
+        }
+        break;
       }
     } catch(e) { /* 다음 API 시도 */ }
   }
+  bgFetching = false;
+  if(!found) showToast('⚠ 스트림 URL 없음 (API 불가)');
 }
 
 function getBgMusicAudio() {
   if(!bgMusicAudio) {
     bgMusicAudio = document.createElement('audio');
-    bgMusicAudio.style.cssText = 'position:absolute;width:0;height:0;display:none;';
+    // display:none 대신 크기·위치 숨김 — 일부 브라우저는 display:none 요소를 미디어로 인식 못함
+    bgMusicAudio.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0.001;top:-9999px;left:-9999px;';
+    bgMusicAudio.setAttribute('playsinline', '');
+    bgMusicAudio.preload = 'auto';
     document.body.appendChild(bgMusicAudio);
-    bgMusicAudio.addEventListener('ended', () => { if(document.hidden) handleEnded(); });
-    bgMusicAudio.addEventListener('error',  () => { bgMusicStreamUrl = null; bgMusicVideoId = null; });
+    bgMusicAudio.addEventListener('ended', () => {
+      if(document.hidden && !userPaused) handleEnded();
+    });
+    bgMusicAudio.addEventListener('error', (e) => {
+      showToast('⚠ bg 오디오 오류: ' + (e.target?.error?.message || '알 수 없음'));
+      bgMusicStreamUrl = null;
+      bgMusicVideoId = null;
+    });
   }
   return bgMusicAudio;
 }
@@ -4424,19 +4448,26 @@ function startBgMusicAudio() {
   if(!bgMusicStreamUrl) return false;
   try {
     const audio = getBgMusicAudio();
-    const pos = (player && playerReady) ? (player.getCurrentTime() || 0) : 0;
     if(audio.src !== bgMusicStreamUrl) {
       audio.src = bgMusicStreamUrl;
-      audio.currentTime = pos;
-    } else if(audio.paused) {
-      audio.currentTime = pos;
+      // ★ 스트리밍 오디오는 src 변경 직후 currentTime seek 불가 — 재생 시작 후 canplay 이벤트에서 처리
     }
-    audio.play().then(() => {
-      // 재생 성공 → 잠금화면에 playing 상태 표시
-      try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
-    }).catch(() => { bgMusicStreamUrl = null; bgMusicVideoId = null; });
+    const playPromise = audio.play();
+    if(playPromise) {
+      playPromise.then(() => {
+        // 재생 성공 → 잠금화면에 playing 상태 표시
+        try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
+      }).catch((err) => {
+        showToast('⚠ bg play 실패: ' + (err?.name || err));
+        bgMusicStreamUrl = null;
+        bgMusicVideoId = null;
+      });
+    }
     return true;
-  } catch(e) { return false; }
+  } catch(e) {
+    showToast('⚠ bg start 오류: ' + e.message);
+    return false;
+  }
 }
 
 function stopBgMusicAudio() {
@@ -4444,6 +4475,23 @@ function stopBgMusicAudio() {
   const pos = bgMusicAudio.currentTime;
   bgMusicAudio.pause();
   return pos;
+}
+
+function unlockBgMusicAudio(silentSrc) {
+  // ★ 핵심: bgMusicAudio를 user-gesture 컨텍스트에서 한 번 play+pause 해야
+  //    이후 백그라운드(비 user-gesture)에서도 play()가 허용됨.
+  const audio = getBgMusicAudio();
+  if(audio.dataset.unlocked) return;
+  audio.src = silentSrc;
+  audio.volume = 0.001;
+  audio.play().then(() => {
+    audio.pause();
+    audio.src = '';
+    audio.dataset.unlocked = '1';
+  }).catch(() => {
+    // 실패해도 src는 초기화
+    audio.src = '';
+  });
 }
 
 function initBackgroundAudio() {
@@ -4479,6 +4527,10 @@ function initBackgroundAudio() {
     }
     // user gesture 컨텍스트 안에서 즉시 play() → autoplay 정책 통과
     if(bgAudioEl) bgAudioEl.play().catch(()=>{});
+
+    // ★ bgMusicAudio를 지금(user gesture) 한 번 play+pause로 "잠금 해제"
+    //    → 이후 백그라운드 컨텍스트에서도 play()가 허용됨
+    if(bgAudioEl && bgAudioEl.src) unlockBgMusicAudio(bgAudioEl.src);
 
     // ── 2. AudioContext 방식 (보조) ───────────────────────────────────
     bgAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
