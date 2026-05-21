@@ -1110,9 +1110,12 @@ window.onYouTubeIframeAPIReady = function() {
             setTimeout(() => {
               if(userPaused || !player || !playerReady) return;
               if(document.hidden) {
-                // 백그라운드 강제 정지 → playbackState를 'paused'로 정확히 표시
-                // → 잠금화면에 play 버튼 노출, isPlaying은 true 유지해 포그라운드 복귀 시 재개
-                try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
+                // ★ bg <audio>가 재생 중이면 'paused'로 덮어쓰지 않음
+                //   (YouTube IFrame이 멈춰도 bg 스트림이 재생 중이면 잠금화면은 playing 상태 유지)
+                const bgPlaying = bgMusicAudio && !bgMusicAudio.paused;
+                if(!bgPlaying) {
+                  try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
+                }
                 // Chrome이 허용하면 즉시 재개 시도 (Android 일부 버전 허용)
                 [600, 2500].forEach(delay => {
                   setTimeout(() => {
@@ -4449,8 +4452,10 @@ function startBgMusicAudio() {
   try {
     const audio = getBgMusicAudio();
     audio.volume = 1.0; // ★ unlock 시 0.001로 설정된 볼륨 반드시 복원
-    if(audio.src !== bgMusicStreamUrl) {
+    // src가 다르거나 에러 상태면 강제 재로드
+    if(audio.src !== bgMusicStreamUrl || audio.error) {
       audio.src = bgMusicStreamUrl;
+      audio.load();
     }
     const playPromise = audio.play();
     if(playPromise) {
@@ -4513,9 +4518,10 @@ function initBackgroundAudio() {
         dv.setUint32(24, sr, true); dv.setUint32(28, sr * 2, true);
         dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
         ws(36,'data'); dv.setUint32(40, ns * 2, true);
-        // 극소 진폭 화이트노이즈 — 순수 무음(0)은 일부 브라우저가 "오디오 없음"으로 판단
+        // 진폭 1 (32768분의 1) — 브라우저가 "활성 오디오"로 인식하되 완전히 들리지 않음
+        // 이전 100이었을 때 volume=0.001로도 지지직 소리가 날 수 있었음
         for(let i = 0; i < ns; i++) {
-          dv.setInt16(44 + i * 2, Math.round((Math.random() * 2 - 1) * 100), true); // ~0.003 FS
+          dv.setInt16(44 + i * 2, (i % 2 === 0) ? 1 : -1, true); // DC-free, ±1/32768
         }
         const url = URL.createObjectURL(new Blob([ab], {type:'audio/wav'}));
         bgAudioEl = document.createElement('audio');
@@ -4539,7 +4545,9 @@ function initBackgroundAudio() {
     function createSilentLoop() {
       const buf = bgAudioCtx.createBuffer(1, bgAudioCtx.sampleRate * 2, bgAudioCtx.sampleRate);
       const data = buf.getChannelData(0);
-      for(let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1);
+      // ★ amplitude 0.0001 (이전 1.0 × gain 0.003 = -50dB → 들림)
+      //   → 0.0001 × 0.003 = -130dB → 완전히 들리지 않음, 브라우저는 여전히 활성 오디오로 인식
+      for(let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.0001;
       const src = bgAudioCtx.createBufferSource();
       src.buffer = buf; src.loop = true;
       const gain = bgAudioCtx.createGain();
