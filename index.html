@@ -1110,13 +1110,8 @@ window.onYouTubeIframeAPIReady = function() {
             setTimeout(() => {
               if(userPaused || !player || !playerReady) return;
               if(document.hidden) {
-                // ★ bg <audio>가 재생 중이면 'paused'로 덮어쓰지 않음
-                //   (YouTube IFrame이 멈춰도 bg 스트림이 재생 중이면 잠금화면은 playing 상태 유지)
-                const bgPlaying = bgMusicAudio && !bgMusicAudio.paused;
-                if(!bgPlaying) {
-                  try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
-                }
-                // Chrome이 허용하면 즉시 재개 시도 (Android 일부 버전 허용)
+                // 항상 paused로 표시 (bgMusicAudio가 실제 데이터 재생을 확인하면 그때 'playing'으로 업데이트)
+                try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
                 [600, 2500].forEach(delay => {
                   setTimeout(() => {
                     if(!userPaused && player && playerReady && document.hidden) {
@@ -4451,26 +4446,41 @@ function startBgMusicAudio() {
   if(!bgMusicStreamUrl) return false;
   try {
     const audio = getBgMusicAudio();
-    audio.volume = 1.0; // ★ unlock 시 0.001로 설정된 볼륨 반드시 복원
+    audio.volume = 1.0;
     // src가 다르거나 에러 상태면 강제 재로드
     if(audio.src !== bgMusicStreamUrl || audio.error) {
       audio.src = bgMusicStreamUrl;
       audio.load();
     }
+    const capturedUrl = bgMusicStreamUrl; // 클로저용 스냅샷
     const playPromise = audio.play();
     if(playPromise) {
       playPromise.then(() => {
-        try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
-        showToast('▶ 백그라운드 재생 시작');
+        // ★ play() 성공 ≠ 실제 오디오 데이터 재생
+        //   1.5초 후 currentTime이 실제로 진행됐는지 확인 후 'playing' 표시
+        const t0 = audio.currentTime;
+        setTimeout(() => {
+          // URL이 바뀌었거나 다른 곡으로 넘어갔으면 무시
+          if(!bgMusicAudio || bgMusicAudio.src !== capturedUrl) return;
+          if(!bgMusicAudio.paused && bgMusicAudio.currentTime > t0 + 0.05) {
+            // ✅ 실제로 오디오 데이터가 흐르고 있음
+            try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
+          } else {
+            // ❌ play()는 성공했지만 오디오 데이터 없음 (URL 불가/만료)
+            bgMusicAudio.pause();
+            bgMusicStreamUrl = null;
+            bgMusicVideoId = null;
+            try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
+          }
+        }, 1500);
       }).catch((err) => {
-        showToast('⚠ bg play 실패: ' + (err?.name || err));
         bgMusicStreamUrl = null;
         bgMusicVideoId = null;
+        try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
       });
     }
     return true;
   } catch(e) {
-    showToast('⚠ bg start 오류: ' + e.message);
     return false;
   }
 }
@@ -4573,6 +4583,9 @@ function initBackgroundAudio() {
       if(document.hidden) {
         // ★ 진입 시점의 재생 상태를 스냅샷으로 저장 (이후 isPlaying이 바뀌어도 복원 기준으로 사용)
         wasPlayingBeforeHide = isPlaying;
+
+        // 즉시 paused 표시 — bgMusicAudio가 실제 데이터 재생 확인 후 'playing'으로 업데이트함
+        try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
 
         // <audio> · AudioContext 유지
         if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
