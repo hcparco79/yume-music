@@ -1103,18 +1103,24 @@ window.onYouTubeIframeAPIReady = function() {
           if(SPEEDS[currentSpeedIdx] !== 1) player.setPlaybackRate(SPEEDS[currentSpeedIdx]);
         }
         else if(e.data === S.PAUSED){
-          // 백그라운드에서 YouTube가 강제로 멈춘 경우 무시
-          if(document.hidden && !userPaused) {
-            // 잠금화면 컨트롤 유지: playbackState를 'playing'으로 고정
-            try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
-            // 여러 번 재개 시도 (브라우저마다 첫 시도가 차단될 수 있음)
-            [500, 2000, 4000, 8000].forEach(delay => {
-              setTimeout(() => {
-                if(!userPaused && player && playerReady && document.hidden) {
-                  try { player.playVideo(); } catch {}
-                }
-              }, delay);
-            });
+          if(!userPaused) {
+            // visibilitychange보다 PAUSED가 먼저 올 수 있으므로 200ms 후 판별
+            setTimeout(() => {
+              if(userPaused || !player || !playerReady) return;
+              if(document.hidden) {
+                // 백그라운드 강제 정지 → 잠금화면 컨트롤 유지 + 재개 시도
+                try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
+                [300, 1500, 3500, 7000].forEach(delay => {
+                  setTimeout(() => {
+                    if(!userPaused && player && playerReady && document.hidden) {
+                      try { player.playVideo(); } catch {}
+                    }
+                  }, delay);
+                });
+              } else {
+                setPlayState(false); stopProgress();
+              }
+            }, 200);
           } else {
             setPlayState(false); stopProgress();
           }
@@ -4242,6 +4248,7 @@ let pipEnabled = false;
 let pipVisible = false;
 let bgAudioCtx = null;
 let bgSilentSource = null;
+let bgAudioEl = null;
 let bgKeepAliveInterval = null;
 let bgActive = true;
 let pipDragging = false, pipDragOX = 0, pipDragOY = 0;
@@ -4325,22 +4332,53 @@ function snapPip() {
 
 function initBackgroundAudio() {
   try {
+    // ── 1. <audio> 엘리먼트 방식 (주력) ──────────────────────────────
+    // AudioContext와 달리 HTML5 <audio>는 백그라운드 탭에서도 브라우저가 중단하지 않음.
+    // 무음 WAV를 루프 재생해 OS가 "오디오 세션 활성" 상태를 유지하게 해
+    // 잠금화면·알림바의 MediaSession 컨트롤이 사라지지 않도록 함.
+    if(!bgAudioEl) {
+      try {
+        const sr = 8000, dur = 3, ns = sr * dur;
+        const ab = new ArrayBuffer(44 + ns * 2);
+        const dv = new DataView(ab);
+        const ws = (o, t) => { for(let i = 0; i < t.length; i++) dv.setUint8(o + i, t.charCodeAt(i)); };
+        ws(0,'RIFF'); dv.setUint32(4, 36 + ns * 2, true); ws(8,'WAVE');
+        ws(12,'fmt '); dv.setUint32(16, 16, true);
+        dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+        dv.setUint32(24, sr, true); dv.setUint32(28, sr * 2, true);
+        dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+        ws(36,'data'); dv.setUint32(40, ns * 2, true);
+        // 샘플값은 0 (무음) — <audio>가 "재생 중"이라는 사실이 중요
+        const url = URL.createObjectURL(new Blob([ab], {type:'audio/wav'}));
+        bgAudioEl = new Audio(url);
+        bgAudioEl.loop = true;
+        bgAudioEl.volume = 0.001;
+      } catch {}
+    }
+    // user gesture 컨텍스트 안에서 즉시 play() → autoplay 정책 통과
+    if(bgAudioEl) bgAudioEl.play().catch(()=>{});
+
+    // ── 2. AudioContext 방식 (보조) ───────────────────────────────────
     bgAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
     function createSilentLoop() {
       const buf = bgAudioCtx.createBuffer(1, bgAudioCtx.sampleRate * 2, bgAudioCtx.sampleRate);
       const data = buf.getChannelData(0);
-      // 버퍼는 풀 진폭으로 채움 — gain 노드만으로 최종 음량 제어 (이중 감쇠 방지)
-      for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1);
+      for(let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1);
       const src = bgAudioCtx.createBufferSource();
       src.buffer = buf; src.loop = true;
       const gain = bgAudioCtx.createGain();
-      gain.gain.value = 0.003; // ~-50dB: 귀에 안 들리지만 OS가 오디오 출력으로 인식
+      gain.gain.value = 0.003;
       src.connect(gain); gain.connect(bgAudioCtx.destination);
       src.start(); return src;
     }
 
+    bgAudioCtx.resume().then(() => {
+      if(!bgSilentSource) bgSilentSource = createSilentLoop();
+    }).catch(()=>{});
+
     function activateBg() {
+      if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
       if(bgAudioCtx.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
       if(!bgSilentSource) bgSilentSource = createSilentLoop();
     }
@@ -4348,21 +4386,17 @@ function initBackgroundAudio() {
       if(bgSilentSource) { try { bgSilentSource.stop(); } catch {} bgSilentSource = null; }
     }
 
-    // ★ user gesture 컨텍스트(touchstart/click) 안에서 즉시 루프 시작
-    // Chrome은 백그라운드 전환 전에 이미 오디오를 출력 중인 AudioContext는 중단하지 않음
-    bgAudioCtx.resume().then(() => {
-      if(!bgSilentSource) bgSilentSource = createSilentLoop();
-    }).catch(()=>{});
-
     document.addEventListener('visibilitychange', () => {
       if(document.hidden) {
-        // 루프가 이미 실행 중이어야 하지만 혹시 suspended됐으면 복구
+        // <audio>는 백그라운드에서도 계속 재생됨 — 혹시 paused면 재시작
+        if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
         if(bgAudioCtx.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
         if(!bgSilentSource) bgSilentSource = createSilentLoop();
         if(isPlaying) {
           try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
           clearInterval(bgKeepAliveInterval);
           bgKeepAliveInterval = setInterval(() => {
+            if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
             if(bgAudioCtx?.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
             if(isPlaying && player && playerReady) {
               try { if(player.getPlayerState() === 2) player.playVideo(); } catch {}
@@ -4373,7 +4407,7 @@ function initBackgroundAudio() {
       } else {
         clearInterval(bgKeepAliveInterval);
         hidePipWidget();
-        // silent loop는 계속 유지 — 포그라운드 복귀 후 재생 시 user gesture 없이도 동작
+        // <audio>·AudioContext 루프는 유지 — 포그라운드 복귀 후 재시작 없이 바로 동작
         if(isPlaying) {
           [300, 800, 1500, 3000].forEach(delay => {
             setTimeout(() => {
@@ -4392,11 +4426,11 @@ function initBackgroundAudio() {
     });
 
     window.addEventListener('pagehide', () => {
+      if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
       if(bgAudioCtx.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
     });
     window._bgActivate = activateBg;
     window._bgDeactivate = deactivateBg;
-    // 재생 시 루프 활성화; 일시정지 시에도 루프 유지 (재resume에 user gesture 불필요하게 유지)
     window._bgAudioSetPlayState = (p) => { if(p) activateBg(); };
     console.log('[BG] 초기화 완료');
   } catch(e) { console.warn('[BG] 실패:', e); }
