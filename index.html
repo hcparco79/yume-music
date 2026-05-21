@@ -2469,12 +2469,22 @@ function updateMediaSession(track) {
       'pause': () => {
         userPaused = true;
         bgPendingPlay = false;
+        wasPlayingBeforeHide = false; // 사용자가 명시적으로 정지 → 복귀 후 자동재개 안 함
         try { navigator.mediaSession.playbackState = 'paused'; } catch {}
         if(player && playerReady) try { player.pauseVideo(); } catch {}
       },
-      'stop':         ()=>{ userPaused=true;  if(player&&playerReady) player.stopVideo(); setPlayState(false); },
-      'nexttrack':    ()=>document.getElementById('btn-next').click(),
-      'previoustrack':()=>document.getElementById('btn-prev').click(),
+      'stop': () => {
+        userPaused = true; bgPendingPlay = false; wasPlayingBeforeHide = false;
+        if(player && playerReady) player.stopVideo(); setPlayState(false);
+      },
+      'nexttrack': () => {
+        document.getElementById('btn-next').click();
+        if(document.hidden) { bgPendingPlay = true; } // 앱 복귀 시 새 트랙 재생
+      },
+      'previoustrack': () => {
+        document.getElementById('btn-prev').click();
+        if(document.hidden) { bgPendingPlay = true; }
+      },
       'seekforward':  (d)=>{ if(player&&playerReady){ const t=player.getCurrentTime()||0; player.seekTo(t+(d?.seekOffset||10),true); }},
       'seekbackward': (d)=>{ if(player&&playerReady){ const t=player.getCurrentTime()||0; player.seekTo(Math.max(0,t-(d?.seekOffset||10)),true); }},
     };
@@ -4263,7 +4273,8 @@ let bgSilentSource = null;
 let bgAudioEl = null;
 let bgKeepAliveInterval = null;
 let bgActive = true;
-let bgPendingPlay = false; // 잠금화면 play 탭 후 포그라운드 복귀 시 재개 플래그
+let bgPendingPlay = false;       // 잠금화면 play 탭 후 포그라운드 복귀 시 재개 플래그
+let wasPlayingBeforeHide = false; // 백그라운드 진입 시점의 재생 상태 스냅샷
 let pipDragging = false, pipDragOX = 0, pipDragOY = 0;
 
 function showPip() {
@@ -4407,36 +4418,42 @@ function initBackgroundAudio() {
 
     document.addEventListener('visibilitychange', () => {
       if(document.hidden) {
-        // <audio>는 백그라운드에서도 계속 재생됨 — 혹시 paused면 재시작
+        // ★ 진입 시점의 재생 상태를 스냅샷으로 저장 (이후 isPlaying이 바뀌어도 복원 기준으로 사용)
+        wasPlayingBeforeHide = isPlaying;
+
+        // <audio> · AudioContext 유지
         if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
         if(bgAudioCtx.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
         if(!bgSilentSource) bgSilentSource = createSilentLoop();
-        if(isPlaying) {
-          try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
-          clearInterval(bgKeepAliveInterval);
-          bgKeepAliveInterval = setInterval(() => {
-            if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
-            if(bgAudioCtx?.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
-            if(isPlaying && player && playerReady) {
-              try { if(player.getPlayerState() === 2) player.playVideo(); } catch {}
-            }
-          }, 2000);
-        }
+
+        // keep-alive: <audio>·AudioContext 상태 주기적 확인
+        clearInterval(bgKeepAliveInterval);
+        bgKeepAliveInterval = setInterval(() => {
+          if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
+          if(bgAudioCtx?.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
+        }, 3000);
+
         if(pipEnabled && currentTrack && isPlaying) showPipWidget();
       } else {
+        // ─── 포그라운드 복귀 ───────────────────────────────────────
         clearInterval(bgKeepAliveInterval);
         hidePipWidget();
-        // <audio>·AudioContext 루프는 유지 — 포그라운드 복귀 후 재시작 없이 바로 동작
-        if(isPlaying || bgPendingPlay) {
-          bgPendingPlay = false;
-          [100, 500, 1200, 2500].forEach(delay => {
+
+        // wasPlayingBeforeHide: 이 값으로 resume 여부 결정 (isPlaying은 백그라운드 중 변질될 수 있음)
+        const shouldResume = wasPlayingBeforeHide || bgPendingPlay;
+        wasPlayingBeforeHide = false;
+        bgPendingPlay = false;
+
+        if(shouldResume && !userPaused) {
+          // 100ms 부터 빠르게 재개 시도
+          [100, 400, 900, 2000].forEach(delay => {
             setTimeout(() => {
               if(userPaused || !player || !playerReady) return;
               try {
                 const s = player.getPlayerState();
-                if(s !== 1) { // 1 = PLAYING, 재생 중이 아닐 때만 시도
+                if(s !== 1) { // 1 = PLAYING 이 아닐 때만
                   player.playVideo();
-                  if(delay >= 500) showToast('▶ 재생 재개');
+                  if(delay >= 400) showToast('▶ 재생 재개');
                 }
               } catch {}
             }, delay);
