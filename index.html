@@ -4448,15 +4448,15 @@ function startBgMusicAudio() {
   if(!bgMusicStreamUrl) return false;
   try {
     const audio = getBgMusicAudio();
+    audio.volume = 1.0; // ★ unlock 시 0.001로 설정된 볼륨 반드시 복원
     if(audio.src !== bgMusicStreamUrl) {
       audio.src = bgMusicStreamUrl;
-      // ★ 스트리밍 오디오는 src 변경 직후 currentTime seek 불가 — 재생 시작 후 canplay 이벤트에서 처리
     }
     const playPromise = audio.play();
     if(playPromise) {
       playPromise.then(() => {
-        // 재생 성공 → 잠금화면에 playing 상태 표시
         try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
+        showToast('▶ 백그라운드 재생 시작');
       }).catch((err) => {
         showToast('⚠ bg play 실패: ' + (err?.name || err));
         bgMusicStreamUrl = null;
@@ -4483,13 +4483,14 @@ function unlockBgMusicAudio(silentSrc) {
   const audio = getBgMusicAudio();
   if(audio.dataset.unlocked) return;
   audio.src = silentSrc;
-  audio.volume = 0.001;
+  audio.volume = 0.001; // unlock용 무음 재생
   audio.play().then(() => {
     audio.pause();
+    audio.volume = 1.0; // ★ 실제 음악 재생에 대비해 볼륨 복원
     audio.src = '';
     audio.dataset.unlocked = '1';
   }).catch(() => {
-    // 실패해도 src는 초기화
+    audio.volume = 1.0; // 실패해도 볼륨은 복원
     audio.src = '';
   });
 }
