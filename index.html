@@ -1108,9 +1108,11 @@ window.onYouTubeIframeAPIReady = function() {
             setTimeout(() => {
               if(userPaused || !player || !playerReady) return;
               if(document.hidden) {
-                // 백그라운드 강제 정지 → 잠금화면 컨트롤 유지 + 재개 시도
-                try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
-                [300, 1500, 3500, 7000].forEach(delay => {
+                // 백그라운드 강제 정지 → playbackState를 'paused'로 정확히 표시
+                // → 잠금화면에 play 버튼 노출, isPlaying은 true 유지해 포그라운드 복귀 시 재개
+                try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
+                // Chrome이 허용하면 즉시 재개 시도 (Android 일부 버전 허용)
+                [600, 2500].forEach(delay => {
                   setTimeout(() => {
                     if(!userPaused && player && playerReady && document.hidden) {
                       try { player.playVideo(); } catch {}
@@ -2458,8 +2460,18 @@ function updateMediaSession(track) {
 
     // 모든 액션 핸들러 등록
     const handlers = {
-      'play':         ()=>{ userPaused=false; if(player&&playerReady) player.playVideo(); },
-      'pause':        ()=>{ userPaused=true;  if(player&&playerReady) player.pauseVideo(); },
+      'play': () => {
+        userPaused = false;
+        bgPendingPlay = true; // 포그라운드 복귀 시 재개 트리거
+        try { navigator.mediaSession.playbackState = 'playing'; } catch {}
+        if(player && playerReady) try { player.playVideo(); } catch {}
+      },
+      'pause': () => {
+        userPaused = true;
+        bgPendingPlay = false;
+        try { navigator.mediaSession.playbackState = 'paused'; } catch {}
+        if(player && playerReady) try { player.pauseVideo(); } catch {}
+      },
       'stop':         ()=>{ userPaused=true;  if(player&&playerReady) player.stopVideo(); setPlayState(false); },
       'nexttrack':    ()=>document.getElementById('btn-next').click(),
       'previoustrack':()=>document.getElementById('btn-prev').click(),
@@ -4251,6 +4263,7 @@ let bgSilentSource = null;
 let bgAudioEl = null;
 let bgKeepAliveInterval = null;
 let bgActive = true;
+let bgPendingPlay = false; // 잠금화면 play 탭 후 포그라운드 복귀 시 재개 플래그
 let pipDragging = false, pipDragOX = 0, pipDragOY = 0;
 
 function showPip() {
@@ -4414,15 +4427,16 @@ function initBackgroundAudio() {
         clearInterval(bgKeepAliveInterval);
         hidePipWidget();
         // <audio>·AudioContext 루프는 유지 — 포그라운드 복귀 후 재시작 없이 바로 동작
-        if(isPlaying) {
-          [300, 800, 1500, 3000].forEach(delay => {
+        if(isPlaying || bgPendingPlay) {
+          bgPendingPlay = false;
+          [100, 500, 1200, 2500].forEach(delay => {
             setTimeout(() => {
-              if(!isPlaying || !player || !playerReady) return;
+              if(userPaused || !player || !playerReady) return;
               try {
                 const s = player.getPlayerState();
-                if(s === 2 || s === -1 || s === 5) {
+                if(s !== 1) { // 1 = PLAYING, 재생 중이 아닐 때만 시도
                   player.playVideo();
-                  if(delay >= 800) showToast('▶ 재생 재개');
+                  if(delay >= 500) showToast('▶ 재생 재개');
                 }
               } catch {}
             }, delay);
