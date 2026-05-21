@@ -1105,12 +1105,16 @@ window.onYouTubeIframeAPIReady = function() {
         else if(e.data === S.PAUSED){
           // 백그라운드에서 YouTube가 강제로 멈춘 경우 무시
           if(document.hidden && !userPaused) {
-            // 백그라운드 강제 정지 → 재개 시도
-            setTimeout(() => {
-              if(!userPaused && player && playerReady) {
-                try { player.playVideo(); } catch {}
-              }
-            }, 500);
+            // 잠금화면 컨트롤 유지: playbackState를 'playing'으로 고정
+            try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
+            // 여러 번 재개 시도 (브라우저마다 첫 시도가 차단될 수 있음)
+            [500, 2000, 4000, 8000].forEach(delay => {
+              setTimeout(() => {
+                if(!userPaused && player && playerReady && document.hidden) {
+                  try { player.playVideo(); } catch {}
+                }
+              }, delay);
+            });
           } else {
             setPlayState(false); stopProgress();
           }
@@ -4239,7 +4243,7 @@ let pipVisible = false;
 let bgAudioCtx = null;
 let bgSilentSource = null;
 let bgKeepAliveInterval = null;
-let bgActive = false;
+let bgActive = true;
 let pipDragging = false, pipDragOX = 0, pipDragOY = 0;
 
 function showPip() {
@@ -4248,7 +4252,7 @@ function showPip() {
   showToast('🪟 미니 플레이어 ON — 다른 앱 전환 시 표시돼요');
 }
 function hidePip() {
-  pipEnabled = false; bgActive = false; pipVisible = false;
+  pipEnabled = false; pipVisible = false;
   pipWidget.classList.remove('visible');
   showToast('미니 플레이어 OFF');
 }
@@ -4326,11 +4330,11 @@ function initBackgroundAudio() {
     function createSilentLoop() {
       const buf = bgAudioCtx.createBuffer(1, bgAudioCtx.sampleRate * 30, bgAudioCtx.sampleRate);
       const data = buf.getChannelData(0);
-      for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1)*0.0001;
+      for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1)*0.003;
       const src = bgAudioCtx.createBufferSource();
       src.buffer = buf; src.loop = true;
       const gain = bgAudioCtx.createGain();
-      gain.gain.value = 0.0001;
+      gain.gain.value = 0.003;
       src.connect(gain); gain.connect(bgAudioCtx.destination);
       src.start(); return src;
     }
@@ -4349,8 +4353,10 @@ function initBackgroundAudio() {
 
     document.addEventListener('visibilitychange', () => {
       if(document.hidden) {
-        if(isPlaying && bgActive) {
+        if(isPlaying) {
           activateBg();
+          // 잠금화면 컨트롤 유지: playbackState를 명시적으로 'playing'으로 고정
+          try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
           clearInterval(bgKeepAliveInterval);
           bgKeepAliveInterval = setInterval(() => {
             if(bgAudioCtx?.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
@@ -4382,7 +4388,7 @@ function initBackgroundAudio() {
       }
     });
 
-    window.addEventListener('pagehide', () => { if(isPlaying && bgActive) activateBg(); });
+    window.addEventListener('pagehide', () => { if(isPlaying) activateBg(); });
     window._bgActivate = activateBg;
     window._bgDeactivate = deactivateBg;
     window._bgAudioSetPlayState = (p) => { if(p && bgActive) activateBg(); else if(!p) deactivateBg(); };
