@@ -1510,42 +1510,40 @@ document.getElementById('np-progress-bar').addEventListener('click', function(e)
   player.seekTo(pct * (player.getDuration()||0), true);
 });
 
-// CONTROLS
-document.getElementById('btn-play-pause').addEventListener('click', () => {
-  if(!player||!playerReady) return;
-  if(isPlaying) {
-    userPaused = true;  // 사용자가 직접 멈춤
-    player.pauseVideo();
-  } else {
-    userPaused = false;
-    player.playVideo();
-  }
-});
-document.getElementById('btn-prev').addEventListener('click', () => {
-  if(queueIndex > 0){ queueIndex--; playTrack(queue[queueIndex]); }
-  else if(player&&playerReady) player.seekTo(0,true);
-});
-document.getElementById('btn-next').addEventListener('click', () => {
-  if(queueIndex < queue.length-1){ queueIndex++; playTrack(queue[queueIndex]); }
-});
-document.getElementById('btn-shuffle').addEventListener('click', function() {
-  isShuffle = !isShuffle;
-  this.classList.toggle('active', isShuffle);
-  showToast(isShuffle ? '셔플 켜짐' : '셔플 꺼짐');
-});
-document.getElementById('btn-repeat').addEventListener('click', function() {
-  repeatMode = (repeatMode+1)%3;
-  const labels = ['반복 끄기','전체 반복','한 곡 반복'];
-  showToast(labels[repeatMode]);
-  this.classList.toggle('active', repeatMode>0);
-  this.style.color = repeatMode===2 ? 'var(--accent)' : '';
-});
-document.getElementById('vol-slider').addEventListener('input', function() {
-  if(player&&playerReady) player.setVolume(parseInt(this.value));
-});
-document.getElementById('btn-mute').addEventListener('click', function() {
-  if(!player||!playerReady) return;
-  if(player.isMuted()){ player.unMute(); } else { player.mute(); }
+// [통합 버튼 클릭 Agent]
+document.getElementById('player-bar').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+
+    switch(btn.id) {
+        case 'btn-play-pause': 
+            if(!player || !playerReady) return;
+            if(isPlaying) { userPaused = true; player.pauseVideo(); }
+            else { userPaused = false; player.playVideo(); }
+            break;
+        case 'btn-prev': 
+            if(queueIndex > 0){ queueIndex--; playTrack(queue[queueIndex]); }
+            else if(player&&playerReady) player.seekTo(0,true);
+            break;
+        case 'btn-next': 
+            if(queueIndex < queue.length-1){ queueIndex++; playTrack(queue[queueIndex]); }
+            break;
+        case 'btn-shuffle': 
+            isShuffle = !isShuffle; 
+            btn.classList.toggle('active', isShuffle);
+            showToast(isShuffle ? '셔플 켜짐' : '셔플 꺼짐');
+            break;
+        case 'btn-repeat': 
+            repeatMode = (repeatMode + 1) % 3;
+            btn.classList.toggle('active', repeatMode > 0);
+            btn.style.color = repeatMode === 2 ? 'var(--accent)' : '';
+            showToast(['반복 끄기','전체 반복','한 곡 반복'][repeatMode]);
+            break;
+        case 'btn-mute': 
+            if(!player||!playerReady) return;
+            player.isMuted() ? player.unMute() : player.mute();
+            break;
+    }
 });
 
 // NP sidebar actions
