@@ -1128,6 +1128,17 @@ input[type=range].vol-slider::-webkit-slider-thumb:hover{background:var(--accent
 <div class="toast" id="toast"></div>
 
 <script>
+
+// [최우선 이벤트 처리]
+// capture: true를 사용하여 다른 로직보다 먼저 이벤트를 낚아챕니다.
+document.body.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    
+    console.log("[우선처리] 버튼 감지됨:", btn.id);
+    // 여기서 바로 동작을 수행하여 백그라운드 로직의 간섭을 피합니다.
+}, { capture: true });  
+
 // ============================================================
 // YOUTUBE IFrame API
 // ============================================================
@@ -4631,14 +4642,17 @@ function initBackgroundAudio() {
     }
 
 document.addEventListener('visibilitychange', () => {
-  const hidden = document.hidden;
-  if (hidden) {
+  if (document.hidden) {
     wasPlayingBeforeHide = isPlaying;
     if (wasPlayingBeforeHide && !userPaused) {
-      if (bgMusicStreamUrl && bgMusicVideoId === currentTrack?.videoId) startBgMusicAudio();
-      else prefetchBgStream(currentTrack?.videoId).then(ok => ok && startBgMusicAudio());
+      // 비동기 작업을 살짝 미뤄서 클릭 등 메인 스레드 동작을 방해하지 않게 함
+      setTimeout(() => {
+        if (bgMusicStreamUrl && bgMusicVideoId === currentTrack?.videoId) startBgMusicAudio();
+        else prefetchBgStream(currentTrack?.videoId).then(ok => ok && startBgMusicAudio());
+      }, 100);
     }
   } else {
+    // 포그라운드 복귀
     const bgPos = stopBgMusicAudio();
     if ((wasPlayingBeforeHide || bgPendingPlay) && !userPaused) {
       [100, 500].forEach(d => setTimeout(() => {
@@ -4651,7 +4665,6 @@ document.addEventListener('visibilitychange', () => {
     wasPlayingBeforeHide = bgPendingPlay = false;
   }
 });
-
     window.addEventListener('pagehide', () => {
       if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
       if(bgAudioCtx.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
@@ -4804,11 +4817,6 @@ document.getElementById('player-bar').addEventListener('click', (e) => {
         }, { passive: true });
     });
 })();
-
-document.body.addEventListener('click', (e) => {
-    console.log("[DEBUG] 클릭 발생:", e.target); 
-    // 만약 이게 찍히는데도 버튼 반응이 없으면, 이벤트는 성공이지만 내부 함수가 죽은 것!
-}, true); // {capture: true} 옵션으로 가장 먼저 이벤트를 가로챔
 
 </script>
 </body>
