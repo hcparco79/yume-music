@@ -370,8 +370,30 @@ input[type=range].vol-slider::-webkit-slider-thumb:hover{background:var(--accent
 #pip-title{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #pip-artist{font-size:11px;color:var(--text3);margin-top:1px}
 #pip-btns{display:flex;align-items:center;justify-content:center;gap:4px;padding:4px 10px 8px}
-#pip-btns button{background:none;border:none;cursor:pointer;color:var(--text2);padding:6px;border-radius:50%;display:flex;align-items:center;transition:all .15s}
-#pip-btns button:hover{color:var(--text);background:var(--surface2)}
+#pip-btns button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text2);
+  /* 수정: 모바일 터치 영역을 최소 44px 이상으로 확보 */
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center; /* 추가: 아이콘 중앙 정렬 확실하게 */
+  transition: all .15s;
+  /* 모바일에서 클릭 시 반짝이는 하이라이트 제거 */
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  -webkit-tap-highlight-color: transparent !important;
+  touch-action: manipulation !important;
+}
+#pip-btns button:hover{
+  color:var(--text);
+  background:var(--surface2)
+}
 #pip-play-btn{width:34px;height:34px;border-radius:50% !important;background:var(--accent) !important;color:#000 !important}
 #pip-play-btn:hover{background:var(--accent2) !important;color:#fff !important}
 #pip-x{position:absolute;top:5px;right:5px;background:rgba(0,0,0,0.55);border:none;cursor:pointer;color:#fff;width:20px;height:20px;border-radius:50%;font-size:10px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;z-index:2}
@@ -1537,10 +1559,15 @@ document.getElementById('np-progress-bar').addEventListener('click', function(e)
 });
 
 // [최종 버튼 클릭 관리자]
-document.body.addEventListener('click', (e) => {
-    // 1. 버튼 찾기 (클릭된 곳이 버튼이거나 버튼 내부의 SVG/아이콘일 경우 처리)
+document.body.addEventListener('touchstart', (e) => {
+    // 터치 시작 시 버튼 클릭 효과를 주고, 클릭 이벤트를 강제로 발생시킴
     const btn = e.target.closest('button');
-    if (!btn) return;
+    if (btn) {
+        btn.classList.add('active'); // 시각적 피드백
+        setTimeout(() => btn.classList.remove('active'), 200);
+        btn.click(); // 강제 클릭 이벤트 실행
+    }
+}, {passive: true});
 
   
 
