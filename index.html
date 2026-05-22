@@ -615,7 +615,7 @@ input[type=range].vol-slider::-webkit-slider-thumb:hover{background:var(--accent
 <div id="app">
 
   <header>
-    <div class="logo">par<span>co</span></div>
+    <div class="logo">YU<span>ME</span></div>
     <div id="search-wrap">
       <input type="text" id="search-input" placeholder="노래, 아티스트 검색..." autocomplete="off">
       <button id="search-btn" aria-label="검색">
@@ -4742,7 +4742,7 @@ document.head.appendChild(offlineStyle);
 renderPlaylistNav();
 renderHomeViews();
 showView('home');
-document.getElementById('search-input').placeholder = 'K-POP, 발라드, 팝, 아티스트 검색...';
+document.getElementById('search-input').placeholder = 'K-POP, 발라드, 팝222, 아티스트 검색...';
 checkSharedPlaylist();
 
 // [핵심] 버튼 클릭 오류를 해결하는 통합 관리자
@@ -4800,6 +4800,7 @@ document.getElementById('player-bar').addEventListener('click', (e) => {
             
             // 즉시 클릭 실행
             btn.click(); 
+            alert('클릭됨!')
         }, { passive: true });
     });
 })();
