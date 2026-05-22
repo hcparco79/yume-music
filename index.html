@@ -34,6 +34,18 @@
   --tab-h:0px;
 }
 
+/* 가장 위에 있는 버튼들을 강제로 터치 가능하게 설정 */
+button, .ctrl-btn, .play-btn {
+    pointer-events: auto !important;
+    touch-action: manipulation !important;
+    z-index: 9999 !important;
+}
+
+/* 혹시 버튼을 덮고 있는 요소가 있는지 강제 투명화 */
+#player-bar {
+    pointer-events: auto !important;
+}
+
 /* 라이트 테마 */
 [data-theme="light"]{
   --bg:#f4f4f8;
@@ -603,7 +615,7 @@ input[type=range].vol-slider::-webkit-slider-thumb:hover{background:var(--accent
 <div id="app">
 
   <header>
-    <div class="logo">YU<span>ME</span></div>
+    <div class="logo">par<span>co</span></div>
     <div id="search-wrap">
       <input type="text" id="search-input" placeholder="노래, 아티스트 검색..." autocomplete="off">
       <button id="search-btn" aria-label="검색">
