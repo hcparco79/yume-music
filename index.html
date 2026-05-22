@@ -1097,38 +1097,23 @@ window.onYouTubeIframeAPIReady = function() {
       },
       onStateChange: (e) => {
         const S = YT.PlayerState;
+        console.log(`[YouTubeState] Code: ${e.data}`);
+
         if(e.data === S.PLAYING){
-          setPlayState(true); startProgress();
+          setPlayState(true);
+          startProgress();
           userPaused = false;
-          if(SPEEDS[currentSpeedIdx] !== 1) player.setPlaybackRate(SPEEDS[currentSpeedIdx]);
-          // 백그라운드 전환 대비 오디오 스트림 미리 페치
-          if(currentTrack?.videoId) prefetchBgStream(currentTrack.videoId).catch(()=>{});
         }
         else if(e.data === S.PAUSED){
-          if(!userPaused) {
-            // visibilitychange보다 PAUSED가 먼저 올 수 있으므로 200ms 후 판별
-            setTimeout(() => {
-              if(userPaused || !player || !playerReady) return;
-              if(document.hidden) {
-                // 항상 paused로 표시 (bgMusicAudio가 실제 데이터 재생을 확인하면 그때 'playing'으로 업데이트)
-                try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
-                [600, 2500].forEach(delay => {
-                  setTimeout(() => {
-                    if(!userPaused && player && playerReady && document.hidden) {
-                      try { player.playVideo(); } catch {}
-                    }
-                  }, delay);
-                });
-              } else {
-                setPlayState(false); stopProgress();
-              }
-            }, 500);
-          } else {
-            setPlayState(false); stopProgress();
-          }
+          // 여기서 바로 setPlayState(false)를 부르면 OS가 잠금화면을 일시정지 상태로 켭니다.
+          // 다만, 사용자가 직접 일시정지한 게 아니라면 백그라운드 로직이 이를 재개시킵니다.
+          setPlayState(false);
+          stopProgress();
+          
+          // OS 미디어 컨트롤러 상태 강제 고정
+          if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
         }
         else if(e.data === S.ENDED){ handleEnded(); }
-        else if(e.data === S.BUFFERING){}
       }
     }
   });
@@ -1420,6 +1405,11 @@ function playTrack(track) {
   if(playerReady && player) {
     player.loadVideoById(track.videoId);
     player.playVideo();
+
+    // 추가: 재생 시작 시 미디어 상태 명시
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'playing';
+
   } else {
     pendingVideoId = track.videoId;
   }
@@ -1443,19 +1433,22 @@ function shuffle(arr) {
 
 function setPlayState(playing) {
   isPlaying = playing;
-  document.getElementById('play-icon').style.display = playing?'none':'block';
-  document.getElementById('pause-icon').style.display = playing?'block':'none';
-  // FSP 동기화
-  const fspPlayIcon = document.getElementById('fsp-play-icon');
-  const fspPauseIcon = document.getElementById('fsp-pause-icon');
-  if(fspPlayIcon) fspPlayIcon.style.display = playing ? 'none' : 'block';
-  if(fspPauseIcon) fspPauseIcon.style.display = playing ? 'block' : 'none';
-  // PiP 동기화
+  
+  // UI 아이콘 업데이트
+  document.getElementById('play-icon').style.display = playing ? 'none' : 'block';
+  document.getElementById('pause-icon').style.display = playing ? 'block' : 'none';
+  
+  // 브라우저 Media Session 상태 동기화 (OS에게 상태를 알림)
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
+  }
+  
+  // 디버깅용 로그 (개발자 도구 Console에서 확인 가능)
+  console.log(`[MediaState] Sync: ${playing ? 'playing' : 'paused'}`);
+
+  // 연동 로직
   if(typeof pipVisible !== 'undefined' && pipVisible) refreshPipPlayState();
-  // 백그라운드 오디오 연동
   if(typeof window._bgAudioSetPlayState === 'function') window._bgAudioSetPlayState(playing);
-  // Media Session 상태 동기화
-  if(typeof syncMediaSessionState === 'function') syncMediaSessionState(playing);
   renderQueueList();
 }
 
@@ -2462,6 +2455,7 @@ function updateMediaSession(track) {
     const handlers = {
       'play': () => {
         userPaused = false;
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; // 강제 고정
         bgPendingPlay = true; // 포그라운드 복귀 시 재개 트리거
         if(document.hidden) {
           // 백그라운드: Piped/Invidious <audio> 스트림으로 즉시 재생 시도
@@ -2480,6 +2474,7 @@ function updateMediaSession(track) {
       },
       'pause': () => {
         userPaused = true;
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; // 강제 고정
         bgPendingPlay = false;
         wasPlayingBeforeHide = false; // 사용자가 명시적으로 정지 → 복귀 후 자동재개 안 함
         try { navigator.mediaSession.playbackState = 'paused'; } catch {}
