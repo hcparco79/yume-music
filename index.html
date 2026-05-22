@@ -126,7 +126,14 @@ main{display:grid;grid-template-columns:240px 1fr 280px;overflow:hidden;position
 
 /* SEARCH RESULTS */
 .results-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:16px}
-.result-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:all .2s;position:relative;group}
+.result-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  overflow:hidden;
+  cursor:pointer;
+  transition:all .2s;
+  position:relative;}
 .result-card:hover{border-color:var(--accent2);transform:translateY(-2px)}
 .result-card:hover .card-overlay{opacity:1}
 .card-thumb{aspect-ratio:16/9;background:var(--surface2);overflow:hidden;position:relative}
@@ -137,9 +144,29 @@ main{display:grid;grid-template-columns:240px 1fr 280px;overflow:hidden;position
 .card-info{padding:10px}
 .card-title{font-size:13px;font-weight:500;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:4px}
 .card-meta{font-size:11px;color:var(--text3)}
-.card-actions{display:flex;gap:4px;margin-top:8px}
-.card-action{background:none;border:1px solid var(--border);border-radius:6px;color:var(--text3);font-size:10px;padding:3px 8px;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif}
-.card-action:hover{color:var(--accent);border-color:var(--accent)}
+.card-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 8px;
+    position: relative; /* 중요: z-index를 적용하기 위해 필요 */
+    z-index: 10;        /* 중요: 오버레이보다 높은 계층 */
+}
+.card-action {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text3);
+    font-size: 10px;
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: all .2s;
+    font-family: 'DM Sans', sans-serif;
+    pointer-events: auto; /* 중요: 클릭 이벤트 보장 */
+}
+.card-action:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+}
 
 /* HOME */
 .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
@@ -1414,6 +1441,7 @@ function playTrack(track) {
     pendingVideoId = track.videoId;
   }
 }
+}
 
 function playQueue(tracks, startIndex=0) {
   queue = [...tracks];
@@ -1443,8 +1471,6 @@ function setPlayState(playing) {
     navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
   }
   
-  // 디버깅용 로그 (개발자 도구 Console에서 확인 가능)
-  console.log(`[MediaState] Sync: ${playing ? 'playing' : 'paused'}`);
 
   // 연동 로직
   if(typeof pipVisible !== 'undefined' && pipVisible) refreshPipPlayState();
@@ -1510,39 +1536,34 @@ document.getElementById('np-progress-bar').addEventListener('click', function(e)
   player.seekTo(pct * (player.getDuration()||0), true);
 });
 
-// [통합 버튼 클릭 Agent]
-document.getElementById('player-bar').addEventListener('click', (e) => {
+// [최종 버튼 클릭 관리자]
+document.body.addEventListener('click', (e) => {
+    // 1. 버튼 찾기 (클릭된 곳이 버튼이거나 버튼 내부의 SVG/아이콘일 경우 처리)
     const btn = e.target.closest('button');
     if (!btn) return;
 
+  
+
     switch(btn.id) {
-        case 'btn-play-pause': 
-            if(!player || !playerReady) return;
-            if(isPlaying) { userPaused = true; player.pauseVideo(); }
-            else { userPaused = false; player.playVideo(); }
-            break;
-        case 'btn-prev': 
-            if(queueIndex > 0){ queueIndex--; playTrack(queue[queueIndex]); }
-            else if(player&&playerReady) player.seekTo(0,true);
-            break;
-        case 'btn-next': 
-            if(queueIndex < queue.length-1){ queueIndex++; playTrack(queue[queueIndex]); }
-            break;
-        case 'btn-shuffle': 
-            isShuffle = !isShuffle; 
-            btn.classList.toggle('active', isShuffle);
-            showToast(isShuffle ? '셔플 켜짐' : '셔플 꺼짐');
-            break;
-        case 'btn-repeat': 
-            repeatMode = (repeatMode + 1) % 3;
-            btn.classList.toggle('active', repeatMode > 0);
-            btn.style.color = repeatMode === 2 ? 'var(--accent)' : '';
-            showToast(['반복 끄기','전체 반복','한 곡 반복'][repeatMode]);
-            break;
-        case 'btn-mute': 
-            if(!player||!playerReady) return;
-            player.isMuted() ? player.unMute() : player.mute();
-            break;
+        // --- [플레이어 제어] ---
+        case 'btn-play-pause': isPlaying ? player.pauseVideo() : player.playVideo(); break;
+        case 'btn-prev': if(queueIndex > 0){ queueIndex--; playTrack(queue[queueIndex]); } else if(playerReady) player.seekTo(0,true); break;
+        case 'btn-next': if(queueIndex < queue.length-1){ queueIndex++; playTrack(queue[queueIndex]); } break;
+        case 'btn-mute': player.isMuted() ? player.unMute() : player.mute(); break;
+
+        // --- [탭/메뉴 내비게이션] ---
+        case 'nav-home': case 'btn-home': case 'tab-home': showView('home'); renderHomeViews(); break;
+        case 'nav-liked': case 'btn-liked': case 'tab-liked': showView('liked'); renderLikedView(); break;
+        case 'tab-search': showView('search'); break;
+        case 'tab-playlists': showView('playlists'); renderMobilePlaylists(); break;
+        case 'tab-lyrics': showView('lyrics'); break;
+        case 'btn-np-lyrics': /* 가사 패널 로직 */ break;
+        case 'btn-settings': /* 설정 로직 */ break;
+        
+        // --- [기능 버튼] ---
+        case 'search-btn': doSearch(document.getElementById('search-input').value); break;
+        case 'btn-new-playlist': document.getElementById('modal-new-playlist').classList.remove('hidden'); break;
+        default: console.log("매핑되지 않은 버튼:", btn.id);
     }
 });
 
