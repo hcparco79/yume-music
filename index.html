@@ -370,30 +370,8 @@ input[type=range].vol-slider::-webkit-slider-thumb:hover{background:var(--accent
 #pip-title{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #pip-artist{font-size:11px;color:var(--text3);margin-top:1px}
 #pip-btns{display:flex;align-items:center;justify-content:center;gap:4px;padding:4px 10px 8px}
-#pip-btns button {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--text2);
-  /* 수정: 모바일 터치 영역을 최소 44px 이상으로 확보 */
-  min-width: 44px;
-  min-height: 44px;
-  padding: 6px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center; /* 추가: 아이콘 중앙 정렬 확실하게 */
-  transition: all .15s;
-  /* 모바일에서 클릭 시 반짝이는 하이라이트 제거 */
-  pointer-events: auto !important;
-  cursor: pointer !important;
-  -webkit-tap-highlight-color: transparent !important;
-  touch-action: manipulation !important;
-}
-#pip-btns button:hover{
-  color:var(--text);
-  background:var(--surface2)
-}
+#pip-btns button{background:none;border:none;cursor:pointer;color:var(--text2);padding:6px;border-radius:50%;display:flex;align-items:center;transition:all .15s}
+#pip-btns button:hover{color:var(--text);background:var(--surface2)}
 #pip-play-btn{width:34px;height:34px;border-radius:50% !important;background:var(--accent) !important;color:#000 !important}
 #pip-play-btn:hover{background:var(--accent2) !important;color:#fff !important}
 #pip-x{position:absolute;top:5px;right:5px;background:rgba(0,0,0,0.55);border:none;cursor:pointer;color:#fff;width:20px;height:20px;border-radius:50%;font-size:10px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;z-index:2}
@@ -1559,15 +1537,10 @@ document.getElementById('np-progress-bar').addEventListener('click', function(e)
 });
 
 // [최종 버튼 클릭 관리자]
-document.body.addEventListener('touchstart', (e) => {
-    // 터치 시작 시 버튼 클릭 효과를 주고, 클릭 이벤트를 강제로 발생시킴
+document.body.addEventListener('click', (e) => {
+    // 1. 버튼 찾기 (클릭된 곳이 버튼이거나 버튼 내부의 SVG/아이콘일 경우 처리)
     const btn = e.target.closest('button');
-    if (btn) {
-        btn.classList.add('active'); // 시각적 피드백
-        setTimeout(() => btn.classList.remove('active'), 200);
-        btn.click(); // 강제 클릭 이벤트 실행
-    }
-}, {passive: true});
+    if (!btn) return;
 
   
 
@@ -1637,7 +1610,7 @@ document.getElementById('btn-settings').addEventListener('click', (e) => {
     { label: pipEnabled ? '🪟 미니 플레이어 끄기' : '🪟 미니 플레이어 + 백그라운드', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>', fn: ()=>{ pipEnabled ? hidePip() : showPip(); } },
     { label:'🎛 이퀄라이저', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>', fn: showEQModal },
     { label:'데이터 백업 (JSON 저장)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>', fn: exportData },
-    { label:'백업 복원 (JSON 불러오기1)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>', fn: importData },
+    { label:'백업 복원 (JSON 불러오기)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>', fn: importData },
   ];
   items.forEach(item => {
     const btn = document.createElement('button');
