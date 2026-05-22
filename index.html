@@ -4748,49 +4748,29 @@ showView('home');
 document.getElementById('search-input').placeholder = 'K-POP, 발라드, 팝, 아티스트 검색...';
 checkSharedPlaylist();
 
-// [핵심] 버튼 클릭 오류를 해결하는 통합 관리자
-document.getElementById('player-bar').addEventListener('click', (e) => {
-    // 클릭된 요소가 버튼이거나 버튼 안의 아이콘/텍스트라면 버튼을 찾음
+// 모든 클릭을 한곳에서 통합 처리하는 최적화된 관리자
+window.addEventListener('pointerdown', (e) => {
     const btn = e.target.closest('button');
     if (!btn) return;
 
-    // 각 버튼별 고유 ID에 맞춰 기능 실행
-    switch(btn.id) {
-        case 'btn-play-pause': 
-            isPlaying ? player.pauseVideo() : player.playVideo(); 
-            break;
-        case 'btn-prev': 
-            if(queueIndex > 0) { queueIndex--; playTrack(queue[queueIndex]); }
-            else if(playerReady) player.seekTo(0, true);
-            break;
-        case 'btn-next': 
-            if(queueIndex < queue.length - 1) { queueIndex++; playTrack(queue[queueIndex]); }
-            break;
-        case 'btn-shuffle': 
-            isShuffle = !isShuffle; 
-            btn.classList.toggle('active', isShuffle); 
-            break;
-        case 'btn-repeat': 
-            repeatMode = (repeatMode + 1) % 3; 
-            btn.classList.toggle('active', repeatMode > 0); 
-            break;
-        case 'btn-mute': 
-            player.isMuted() ? player.unMute() : player.mute(); 
-            break;
-        case 'btn-speed': // 속도 조절 버튼 호출
-            if(typeof document.getElementById('btn-speed').click === 'function') {
-                // 기존 로직을 그대로 사용하도록 유도
-            }
-            break;
-        case 'btn-ab': // AB 반복 버튼 호출
-            document.getElementById('btn-ab').click(); 
-            break;
-        case 'btn-sleep': // 수면 타이머 버튼 호출
-            document.getElementById('btn-sleep').click();
-            break;
-    }
-});
+    // 이벤트가 씹히지 않게 즉시 동작 실행
+    e.preventDefault(); // 기본 동작 방지
+    handleButtonClick(btn.id); 
+}, { passive: false });
 
+function handleButtonClick(btnId) {
+    console.log("버튼 클릭됨:", btnId);
+    switch(btnId) {
+        case 'btn-play-pause': isPlaying ? player.pauseVideo() : player.playVideo(); break;
+        case 'btn-prev': if(queueIndex > 0){ queueIndex--; playTrack(queue[queueIndex]); } else if(playerReady) player.seekTo(0,true); break;
+        case 'btn-next': if(queueIndex < queue.length-1){ queueIndex++; playTrack(queue[queueIndex]); } break;
+        case 'btn-mute': player.isMuted() ? player.unMute() : player.mute(); break;
+        case 'nav-home': case 'btn-home': case 'tab-home': showView('home'); renderHomeViews(); break;
+        case 'nav-liked': case 'btn-liked': case 'tab-liked': showView('liked'); renderLikedView(); break;
+        case 'search-btn': doSearch(document.getElementById('search-input').value); break;
+        // 다른 버튼들도 여기에 추가
+    }
+}
 
 </script>
 </body>
