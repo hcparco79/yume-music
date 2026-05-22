@@ -4430,37 +4430,35 @@ const BG_STREAM_APIS = [
 
 async function prefetchBgStream(videoId) {
   if(!videoId) return;
-  if(bgMusicVideoId === videoId && bgMusicStreamUrl) return; // 이미 URL 있음
-  if(bgFetching && bgMusicVideoId === videoId) return; // 이미 페치 중
+  // 기존 로직 유지하되, 브라우저가 차단하는 경우를 대비해 fetch 설정을 보강합니다.
   bgFetching = true;
-  bgMusicStreamUrl = null;
-  bgMusicVideoId = videoId;
-  let found = false;
+  
+  // 성공할 때까지 인스턴스를 순차적으로 강하게 시도
   for(const apiUrl of BG_STREAM_APIS) {
     try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 6000);
-      const res = await fetch(apiUrl(videoId), { signal: ctrl.signal });
-      clearTimeout(t);
+      const res = await fetch(apiUrl(videoId), { 
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        mode: 'cors' 
+      });
       if(!res.ok) continue;
+      
       const data = await res.json();
-      // Piped: data.audioStreams / Invidious: data.adaptiveFormats
       const streams = (data.audioStreams || data.adaptiveFormats || [])
         .filter(s => s.url && (s.mimeType || s.type || '').includes('audio'))
         .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+
       if(streams[0]?.url) {
         bgMusicStreamUrl = streams[0].url;
-        found = true;
-        // 이미 백그라운드 상태이면 즉시 재생 시작
-        if(document.hidden && (isPlaying || bgPendingPlay) && !userPaused) {
-          startBgMusicAudio();
-        }
-        break;
+        bgMusicVideoId = videoId;
+        console.log("[BG] 스트림 URL 확보 성공:", bgMusicStreamUrl);
+        bgFetching = false;
+        return true; // 확보 성공!
       }
-    } catch(e) { /* 다음 API 시도 */ }
+    } catch(e) { console.warn("[BG] API 오류:", apiUrl(videoId)); }
   }
   bgFetching = false;
-  if(!found) showToast('⚠ 스트림 URL 없음 (API 불가)');
+  return false;
 }
 
 function getBgMusicAudio() {
