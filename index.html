@@ -4742,7 +4742,7 @@ document.head.appendChild(offlineStyle);
 renderPlaylistNav();
 renderHomeViews();
 showView('home');
-document.getElementById('search-input').placeholder = 'K-POP, 발라드, 팝222, 아티스트 검색...';
+document.getElementById('search-input').placeholder = 'K-POP, 발라드, 팝, 아티스트 검색...';
 checkSharedPlaylist();
 
 // [핵심] 버튼 클릭 오류를 해결하는 통합 관리자
@@ -4804,6 +4804,11 @@ document.getElementById('player-bar').addEventListener('click', (e) => {
         }, { passive: true });
     });
 })();
+
+document.body.addEventListener('click', (e) => {
+    console.log("[DEBUG] 클릭 발생:", e.target); 
+    // 만약 이게 찍히는데도 버튼 반응이 없으면, 이벤트는 성공이지만 내부 함수가 죽은 것!
+}, true); // {capture: true} 옵션으로 가장 먼저 이벤트를 가로챔
 
 </script>
 </body>
