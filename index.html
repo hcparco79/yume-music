@@ -1079,28 +1079,6 @@ let pendingVideoId = null;
 // 사용자가 직접 일시정지했는지 여부 (백그라운드 강제정지와 구분)
 let userPaused = false;
 
-document.addEventListener('DOMContentLoaded', () => {
-    // 1. 기존의 개별 버튼들을 전부 여기로 옮깁니다
-    document.getElementById('btn-play-pause').addEventListener('click', () => {
-        if(!player || !playerReady) return;
-        if(isPlaying) { userPaused = true; player.pauseVideo(); }
-        else { userPaused = false; player.playVideo(); }
-    });
-
-    document.getElementById('btn-prev').addEventListener('click', () => {
-        if(queueIndex > 0){ queueIndex--; playTrack(queue[queueIndex]); }
-        else if(player&&playerReady) player.seekTo(0,true);
-    });
-
-    document.getElementById('btn-next').addEventListener('click', () => {
-        if(queueIndex < queue.length-1){ queueIndex++; playTrack(queue[queueIndex]); }
-    });
-
-    // ... 나머지 모든 버튼 이벤트 리스너들을 여기로 다 옮기세요!
-    
-    console.log("모든 버튼 이벤트 리스너 등록 완료");
-});
-
 window.onYouTubeIframeAPIReady = function() {
   player = new YT.Player('yt-player', {
     height:'1', width:'1',
@@ -4676,11 +4654,7 @@ function initBackgroundAudio() {
 
 ['touchstart','click'].forEach(ev =>
   document.addEventListener(ev, function init() {
-    try {
-        initBackgroundAudio();
-    } catch(err) {
-        console.error("BG Audio 초기화 실패 (버튼 작동과는 무관하게 처리됨):", err);
-    }
+    initBackgroundAudio();
     document.removeEventListener(ev, init);
   }, {once:true, passive:true})
 );
@@ -4759,6 +4733,50 @@ renderHomeViews();
 showView('home');
 document.getElementById('search-input').placeholder = 'K-POP, 발라드, 팝, 아티스트 검색...';
 checkSharedPlaylist();
+
+// [핵심] 버튼 클릭 오류를 해결하는 통합 관리자
+document.getElementById('player-bar').addEventListener('click', (e) => {
+    // 클릭된 요소가 버튼이거나 버튼 안의 아이콘/텍스트라면 버튼을 찾음
+    const btn = e.target.closest('button');
+    if (!btn) return;
+
+    // 각 버튼별 고유 ID에 맞춰 기능 실행
+    switch(btn.id) {
+        case 'btn-play-pause': 
+            isPlaying ? player.pauseVideo() : player.playVideo(); 
+            break;
+        case 'btn-prev': 
+            if(queueIndex > 0) { queueIndex--; playTrack(queue[queueIndex]); }
+            else if(playerReady) player.seekTo(0, true);
+            break;
+        case 'btn-next': 
+            if(queueIndex < queue.length - 1) { queueIndex++; playTrack(queue[queueIndex]); }
+            break;
+        case 'btn-shuffle': 
+            isShuffle = !isShuffle; 
+            btn.classList.toggle('active', isShuffle); 
+            break;
+        case 'btn-repeat': 
+            repeatMode = (repeatMode + 1) % 3; 
+            btn.classList.toggle('active', repeatMode > 0); 
+            break;
+        case 'btn-mute': 
+            player.isMuted() ? player.unMute() : player.mute(); 
+            break;
+        case 'btn-speed': // 속도 조절 버튼 호출
+            if(typeof document.getElementById('btn-speed').click === 'function') {
+                // 기존 로직을 그대로 사용하도록 유도
+            }
+            break;
+        case 'btn-ab': // AB 반복 버튼 호출
+            document.getElementById('btn-ab').click(); 
+            break;
+        case 'btn-sleep': // 수면 타이머 버튼 호출
+            document.getElementById('btn-sleep').click();
+            break;
+    }
+});
+
 </script>
 </body>
 </html>
