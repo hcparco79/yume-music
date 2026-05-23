@@ -1417,7 +1417,6 @@ function playTrack(track) {
   if(typeof resetAB === 'function') resetAB();
   if(typeof onTrackChanged === 'function') onTrackChanged(track);
 
-  if(playerReady && player) {
   if(playerReady && player && typeof player.loadVideoById === 'function') {
     player.loadVideoById(track.videoId);
     player.playVideo();
@@ -4483,7 +4482,7 @@ document.getElementById('player-bar').addEventListener('click', (e) => {
             document.getElementById('btn-sleep').click();
             break;
     }
-});
+  });
 
 </script>
 </body>
