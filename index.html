@@ -4542,16 +4542,25 @@ function unlockBgMusicAudio(silentSrc) {
 function initBackgroundAudio() {
     if (bgAudioCtx) return;
     try {
-        // 1. Silent Loop로 브라우저 점유
         bgAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // ★ 수정: 버퍼에 아주 미세한 노이즈(0.0001) 추가
         const buf = bgAudioCtx.createBuffer(1, bgAudioCtx.sampleRate * 2, bgAudioCtx.sampleRate);
+        const data = buf.getChannelData(0);
+        for(let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.0001; 
+        
         const src = bgAudioCtx.createBufferSource();
         src.buffer = buf;
         src.loop = true;
-        src.connect(bgAudioCtx.destination);
+        
+        // ★ 수정: gainNode를 추가하여 사람이 들을 수 없는 수준으로 출력
+        const gain = bgAudioCtx.createGain();
+        gain.gain.value = 0.01; 
+        src.connect(gain);
+        gain.connect(bgAudioCtx.destination);
+        
         src.start();
         
-        // 2. 미디어 세션 연결
         if ('mediaSession' in navigator) {
             navigator.mediaSession.playbackState = 'playing';
         }
