@@ -1440,16 +1440,23 @@ function playTrack(track) {
 
   if(playerReady && player) {
     player.loadVideoById(track.videoId);
-    player.playVideo();
+    
+    if (document.hidden && typeof prefetchBgStream === 'function') {
+      // 백그라운드 상태에서 곡이 넘어갈 때는 Iframe 대신 직접 오디오 스트림 재생 트리거
+      setPlayState(true);
+      userPaused = false;
+      bgPendingPlay = true; // 화면 복귀 시 Iframe 이어 재생
+      prefetchBgStream(track.videoId).catch(()=>{});
+    } else {
+      player.playVideo();
+    }
 
-    // 추가: 재생 시작 시 미디어 상태 명시
     if ('mediaSession' in navigator) {
       navigator.mediaSession.playbackState = 'playing';
-
+    }
   } else {
     pendingVideoId = track.videoId;
   }
-}
 }
 
 function playQueue(tracks, startIndex=0) {
@@ -2483,6 +2490,7 @@ function updateMediaSession(track) {
     const handlers = {
       'play': () => {
         userPaused = false;
+        setPlayState(true); // 내부 상태 동기화 추가
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; // 강제 고정
         bgPendingPlay = true; // 포그라운드 복귀 시 재개 트리거
         if(document.hidden) {
@@ -2502,6 +2510,7 @@ function updateMediaSession(track) {
       },
       'pause': () => {
         userPaused = true;
+        setPlayState(false); // 내부 상태 동기화 추가
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; // 강제 고정
         bgPendingPlay = false;
         wasPlayingBeforeHide = false; // 사용자가 명시적으로 정지 → 복귀 후 자동재개 안 함
@@ -3403,7 +3412,21 @@ function handleEnded() {
     setPlayState(false);
     return;
   }
-  if(repeatMode===2){ player.seekTo(0); player.playVideo(); return; }
+  if(repeatMode===2){ 
+    if (document.hidden && typeof getBgMusicAudio === 'function') {
+      const audio = getBgMusicAudio();
+      if (audio && audio.src) {
+        audio.currentTime = 0;
+        audio.play().catch(()=>{});
+        return;
+      }
+    }
+    if (player && playerReady) {
+      player.seekTo(0, true); 
+      player.playVideo(); 
+    }
+    return; 
+  }
   if(queueIndex < queue.length-1){ queueIndex++; playTrack(queue[queueIndex]); }
   else if(repeatMode===1){ queueIndex=0; playTrack(queue[0]); }
   else { setPlayState(false); }
@@ -4402,12 +4425,17 @@ let bgFetching = false; // 중복 fetch 방지 플래그
 
 const BG_STREAM_APIS = [
   id => `https://pipedapi.kavin.rocks/streams/${id}`,
-  id => `https://pipedapi-libre.kavin.rocks/streams/${id}`,
   id => `https://api.piped.privacydev.net/streams/${id}`,
-  id => `https://piped.video/api/streams/${id}`,
-  id => `https://piped.adminforge.de/api/streams/${id}`,
-  id => `https://inv.nadeko.net/api/v1/videos/${id}?fields=adaptiveFormats`,
+  id => `https://pipedapi.smnz.de/streams/${id}`,
+  id => `https://pipedapi.ngn.tf/streams/${id}`,
+  id => `https://api.piped.projectsegfau.lt/streams/${id}`,
+  id => `https://pipedapi.drgns.space/streams/${id}`,
+  id => `https://inv.tux.pizza/api/v1/videos/${id}?fields=adaptiveFormats`,
+  id => `https://invidious.jing.rocks/api/v1/videos/${id}?fields=adaptiveFormats`,
   id => `https://invidious.nerdvpn.de/api/v1/videos/${id}?fields=adaptiveFormats`,
+  id => `https://inv.n0t.me/api/v1/videos/${id}?fields=adaptiveFormats`,
+  id => `https://invidious.lunar.icu/api/v1/videos/${id}?fields=adaptiveFormats`,
+  id => `https://invidious.slipfox.xyz/api/v1/videos/${id}?fields=adaptiveFormats`,
 ];
 
 async function prefetchBgStream(videoId) {
@@ -4525,11 +4553,9 @@ function unlockBgMusicAudio(silentSrc) {
   audio.play().then(() => {
     audio.pause();
     audio.volume = 1.0; // ★ 실제 음악 재생에 대비해 볼륨 복원
-    audio.src = '';
     audio.dataset.unlocked = '1';
   }).catch(() => {
     audio.volume = 1.0; // 실패해도 볼륨은 복원
-    audio.src = '';
   });
 }
 
