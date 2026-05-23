@@ -1448,11 +1448,9 @@ function playTrack(track) {
       prefetchBgStream(track.videoId).then(success => {
         if(success) {
           setPlayState(true);
-          startBgMusicAudio();
         } else {
           setPlayState(false);
           bgPendingPlay = false;
-          if(player && playerReady) player.pauseVideo();
         }
       });
     } else {
@@ -2515,7 +2513,6 @@ function updateMediaSession(track) {
                 try { if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
               } else {
                 setPlayState(true);
-                startBgMusicAudio();
                 try { if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
               }
             });
@@ -4812,6 +4809,7 @@ renderHomeViews();
 showView('home');
 document.getElementById('search-input').placeholder = 'K-POP, 발라드, 팝, 아티스트 검색...';
 checkSharedPlaylist();
+
 
 </script>
 </body>
