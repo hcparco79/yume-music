@@ -4403,37 +4403,44 @@ const BG_STREAM_APIS = [
 
 async function prefetchBgStream(videoId) {
   if(!videoId) return;
-  if(bgMusicVideoId === videoId && bgMusicStreamUrl) return; // 이미 URL 있음
-  if(bgFetching && bgMusicVideoId === videoId) return; // 이미 페치 중
+  if(bgMusicVideoId === videoId && bgMusicStreamUrl) return; 
+  if(bgFetching && bgMusicVideoId === videoId) return;
+  
   bgFetching = true;
   bgMusicStreamUrl = null;
   bgMusicVideoId = videoId;
   let found = false;
+
   for(const apiUrl of BG_STREAM_APIS) {
     try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 6000);
-      const res = await fetch(apiUrl(videoId), { signal: ctrl.signal });
-      clearTimeout(t);
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 8000); // 8초로 조금 여유 확보
+      const res = await fetch(apiUrl(videoId), { signal: controller.signal });
+      clearTimeout(id);
+      
       if(!res.ok) continue;
       const data = await res.json();
-      // Piped: data.audioStreams / Invidious: data.adaptiveFormats
+      
+      // 오디오 전용 스트림만 엄격히 필터링 (영상 포함 스트림 제외)
       const streams = (data.audioStreams || data.adaptiveFormats || [])
         .filter(s => s.url && (s.mimeType || s.type || '').includes('audio'))
         .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-      if(streams[0]?.url) {
+
+      if(streams.length > 0) {
         bgMusicStreamUrl = streams[0].url;
         found = true;
-        // 이미 백그라운드 상태이면 즉시 재생 시작
+        
+        // 백그라운드 진입 시 즉시 재생하는 대신, 500ms 지연 후 재생하여
+        // OS가 오디오 컨텍스트를 충분히 활성화할 시간을 줌
         if(document.hidden && (isPlaying || bgPendingPlay) && !userPaused) {
-          startBgMusicAudio();
+          setTimeout(() => startBgMusicAudio(), 500); 
         }
         break;
       }
-    } catch(e) { /* 다음 API 시도 */ }
+    } catch(e) { console.warn("[BG] API 실패:", apiUrl(videoId)); }
   }
   bgFetching = false;
-  if(!found) showToast('⚠ 스트림 URL 없음 (API 불가)');
+  if(!found) showToast('⚠ 재생 가능한 오디오 소스를 찾을 수 없음');
 }
 
 function getBgMusicAudio() {
@@ -4797,30 +4804,31 @@ document.getElementById('player-bar').addEventListener('click', (e) => {
 });
 
 document.addEventListener('visibilitychange', () => {
-  const hidden = document.hidden;
-  if (hidden) {
-    wasPlayingBeforeHide = isPlaying;
-    if (wasPlayingBeforeHide && !userPaused) {
-      // 구버전의 핵심: 스트림이 있으면 바로 재생, 없으면 미리 가져와서 재생
-      if (bgMusicStreamUrl && bgMusicVideoId === currentTrack?.videoId) {
-        startBgMusicAudio();
-      } else {
-        prefetchBgStream(currentTrack?.videoId).then(ok => ok && startBgMusicAudio());
-      }
-    }
-  } else {
-    // 포그라운드 복귀 시: YouTube 플레이어로 전환
-    const bgPos = stopBgMusicAudio();
-    if ((wasPlayingBeforeHide || bgPendingPlay) && !userPaused) {
-      [100, 500].forEach(d => setTimeout(() => {
-        if (!userPaused && player?.getPlayerState() !== 1) {
-          if (bgPos > 0 && d === 100) player.seekTo(bgPos, true);
-          player.playVideo();
+    if (document.hidden) {
+        // [백그라운드 진입]
+        wasPlayingBeforeHide = isPlaying;
+        if (wasPlayingBeforeHide && !userPaused) {
+            // URL 확보를 기다리지 말고, 이미 있는 스트림이 있다면 즉시 재생
+            if (bgMusicStreamUrl) {
+                startBgMusicAudio();
+            } else {
+                // 스트림이 없다면 백그라운드에서 아주 짧은 무음 재생을 계속 시도하여 세션을 유지
+                if(bgAudioEl) bgAudioEl.play().catch(()=>{});
+                // 스트림 fetch는 백그라운드에서 실행 (실패해도 앱이 죽지는 않게)
+                prefetchBgStream(currentTrack?.videoId); 
+            }
         }
-      }, d));
+    } else {
+        // [포그라운드 복귀]
+        // 1. YouTube 플레이어 상태 강제 동기화
+        if (wasPlayingBeforeHide && !userPaused) {
+            player.playVideo();
+            showToast('▶ 재생 재개');
+        }
+        // 2. 오디오 자원 반환
+        stopBgMusicAudio();
+        wasPlayingBeforeHide = false;
     }
-    wasPlayingBeforeHide = bgPendingPlay = false;
-  }
 });
 
 </script>
