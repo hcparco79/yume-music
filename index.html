@@ -4593,32 +4593,28 @@ function initBackgroundAudio() {
       if(bgSilentSource) { try { bgSilentSource.stop(); } catch {} bgSilentSource = null; }
     }
 
+// [안정성 최우선] 백그라운드/포그라운드 전환 관리
 document.addEventListener('visibilitychange', () => {
-    // 페이지가 숨겨질 때 (백그라운드 진입)
-    if (document.hidden) {
+    const isBackground = document.hidden;
+    
+    if (isBackground) {
+        // 1. 백그라운드 진입 시: 기존 재생 상태만 보존하고 오디오 유지 시도
         wasPlayingBeforeHide = isPlaying;
         if (wasPlayingBeforeHide && !userPaused) {
-            // 버튼 클릭 이벤트와 충돌하지 않도록 300ms 지연 후 실행
-            setTimeout(() => {
-                if (bgMusicStreamUrl && bgMusicVideoId === currentTrack?.videoId) {
-                    startBgMusicAudio();
-                } else if (currentTrack?.videoId) {
-                    prefetchBgStream(currentTrack.videoId).then(ok => ok && startBgMusicAudio());
-                }
-            }, 300);
+            // 스트림이 있다면 즉시 재생, 없다면 fetch 요청
+            if (bgMusicStreamUrl) startBgMusicAudio();
+            else prefetchBgStream(currentTrack?.videoId).then(ok => ok && startBgMusicAudio());
         }
-    } 
-    // 페이지가 다시 보일 때 (포그라운드 복귀)
-    else {
-        const bgPos = stopBgMusicAudio();
-        if ((wasPlayingBeforeHide || bgPendingPlay) && !userPaused) {
-            // 재생 재개 시도
+    } else {
+        // 2. 포그라운드 복귀 시: YouTube 플레이어로 동기화
+        const bgPos = stopBgMusicAudio(); // 오디오 정지하고 위치값 받아옴
+        
+        if ((wasPlayingBeforeHide || bgPendingPlay) && !userPaused && player?.getPlayerState() !== 1) {
+            // YouTube 플레이어 재개
             setTimeout(() => {
-                if (!userPaused && player?.getPlayerState() !== 1) {
-                    if (bgPos > 0) player.seekTo(bgPos, true);
-                    player.playVideo();
-                }
-            }, 500);
+                if (bgPos > 0) player.seekTo(bgPos, true);
+                player.playVideo();
+            }, 300);
         }
         wasPlayingBeforeHide = bgPendingPlay = false;
     }
