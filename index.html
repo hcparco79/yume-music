@@ -4576,15 +4576,19 @@ function initBackgroundAudio() {
     function createSilentLoop() {
       const buf = bgAudioCtx.createBuffer(1, bgAudioCtx.sampleRate * 2, bgAudioCtx.sampleRate);
       const data = buf.getChannelData(0);
-      // ★ amplitude 0.0001 (이전 1.0 × gain 0.003 = -50dB → 들림)
-      //   → 0.0001 × 0.003 = -130dB → 완전히 들리지 않음, 브라우저는 여전히 활성 오디오로 인식
+      // ★ 미세 노이즈 삽입 (브라우저가 재생 중이라 착각하게 함)
       for(let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.0001;
       const src = bgAudioCtx.createBufferSource();
-      src.buffer = buf; src.loop = true;
+      src.buffer = buf; 
+      src.loop = true;
+      
       const gain = bgAudioCtx.createGain();
-      gain.gain.value = 0.003;
-      src.connect(gain); gain.connect(bgAudioCtx.destination);
-      src.start(); return src;
+      gain.gain.value = 0.01; // 소리는 거의 안 들리게
+      src.connect(gain); 
+      gain.connect(bgAudioCtx.destination);
+      
+      src.start(); 
+      return src;
     }
 
     bgAudioCtx.resume().then(() => {
