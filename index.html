@@ -1443,10 +1443,16 @@ function playTrack(track) {
     
     if (document.hidden && typeof prefetchBgStream === 'function') {
       // 백그라운드 상태에서 곡이 넘어갈 때는 Iframe 대신 직접 오디오 스트림 재생 트리거
-      setPlayState(true);
       userPaused = false;
       bgPendingPlay = true; // 화면 복귀 시 Iframe 이어 재생
-      prefetchBgStream(track.videoId).catch(()=>{});
+      prefetchBgStream(track.videoId).then(success => {
+        if(success) {
+          setPlayState(true);
+        } else {
+          setPlayState(false);
+          bgPendingPlay = false;
+        }
+      });
     } else {
       player.playVideo();
     }
@@ -2490,18 +2496,26 @@ function updateMediaSession(track) {
     const handlers = {
       'play': () => {
         userPaused = false;
-        setPlayState(true); // 내부 상태 동기화 추가
-        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; // 강제 고정
         bgPendingPlay = true; // 포그라운드 복귀 시 재개 트리거
         if(document.hidden) {
           // 백그라운드: Piped/Invidious <audio> 스트림으로 즉시 재생 시도
           const started = startBgMusicAudio();
           if(started) {
-            // play() 호출 성공 (then에서 mediaSession 업데이트)
+            setPlayState(true);
+            try { if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
           } else if(currentTrack?.videoId) {
             // URL 없으면 먼저 페치 → 완료 후 prefetchBgStream 내부에서 자동 시작
             showToast('🔄 스트림 준비 중...');
-            prefetchBgStream(currentTrack.videoId).catch(()=>{});
+            prefetchBgStream(currentTrack.videoId).then(success => {
+              if(!success) {
+                setPlayState(false);
+                bgPendingPlay = false;
+                try { if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
+              } else {
+                setPlayState(true);
+                try { if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
+              }
+            });
           }
         } else {
           try { navigator.mediaSession.playbackState = 'playing'; } catch {}
@@ -2510,12 +2524,14 @@ function updateMediaSession(track) {
       },
       'pause': () => {
         userPaused = true;
-        setPlayState(false); // 내부 상태 동기화 추가
-        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; // 강제 고정
         bgPendingPlay = false;
         wasPlayingBeforeHide = false; // 사용자가 명시적으로 정지 → 복귀 후 자동재개 안 함
         try { navigator.mediaSession.playbackState = 'paused'; } catch {}
         if(player && playerReady) try { player.pauseVideo(); } catch {}
+        if(document.hidden && typeof stopBgMusicAudio === 'function') {
+          stopBgMusicAudio();
+          setPlayState(false);
+        }
       },
       'stop': () => {
         userPaused = true; bgPendingPlay = false; wasPlayingBeforeHide = false;
@@ -4439,9 +4455,9 @@ const BG_STREAM_APIS = [
 ];
 
 async function prefetchBgStream(videoId) {
-  if(!videoId) return;
-  if(bgMusicVideoId === videoId && bgMusicStreamUrl) return; // 이미 URL 있음
-  if(bgFetching && bgMusicVideoId === videoId) return; // 이미 페치 중
+  if(!videoId) return false;
+  if(bgMusicVideoId === videoId && bgMusicStreamUrl) return true; // 이미 URL 있음
+  if(bgFetching && bgMusicVideoId === videoId) return false; // 이미 페치 중
   bgFetching = true;
   bgMusicStreamUrl = null;
   bgMusicVideoId = videoId;
@@ -4470,7 +4486,11 @@ async function prefetchBgStream(videoId) {
     } catch(e) { /* 다음 API 시도 */ }
   }
   bgFetching = false;
-  if(!found) showToast('⚠ 스트림 URL 없음 (API 불가)');
+  if(!found) { 
+    showToast('⚠ 스트림 URL 없음 (API 불가)'); 
+    return false; 
+  }
+  return true;
 }
 
 function getBgMusicAudio() {
