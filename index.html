@@ -1448,9 +1448,11 @@ function playTrack(track) {
       prefetchBgStream(track.videoId).then(success => {
         if(success) {
           setPlayState(true);
+          startBgMusicAudio();
         } else {
           setPlayState(false);
           bgPendingPlay = false;
+          if(player && playerReady) player.pauseVideo();
         }
       });
     } else {
@@ -2513,6 +2515,7 @@ function updateMediaSession(track) {
                 try { if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
               } else {
                 setPlayState(true);
+                startBgMusicAudio();
                 try { if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
               }
             });
@@ -4675,7 +4678,9 @@ function initBackgroundAudio() {
             startBgMusicAudio();
           } else if(currentTrack?.videoId) {
             // 아직 없으면 페치 (처음 재생 or 곡 변경 직후)
-            prefetchBgStream(currentTrack.videoId).catch(()=>{});
+            prefetchBgStream(currentTrack.videoId).then(success => {
+              if(success) startBgMusicAudio();
+            });
           }
         }
 
