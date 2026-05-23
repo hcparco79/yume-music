@@ -1433,6 +1433,9 @@ function playTrack(track) {
     player.loadVideoById(track.videoId);
     player.playVideo();
 
+    // 플레이어가 영상을 로드하는 동안 백그라운드용 스트림도 미리 요청합니다.
+    prefetchBgStream(track.videoId).catch(err => console.warn("[BG] 사전 로드 실패:", err));
+
     // 추가: 재생 시작 시 미디어 상태 명시
     if ('mediaSession' in navigator) {
       navigator.mediaSession.playbackState = 'playing';
@@ -4601,28 +4604,16 @@ function initBackgroundAudio() {
 
 // [안정성 최우선] 백그라운드/포그라운드 전환 관리
 document.addEventListener('visibilitychange', () => {
-    const isBackground = document.hidden;
-    
-    if (isBackground) {
-        // 1. 백그라운드 진입 시: 기존 재생 상태만 보존하고 오디오 유지 시도
-        wasPlayingBeforeHide = isPlaying;
-        if (wasPlayingBeforeHide && !userPaused) {
-            // 스트림이 있다면 즉시 재생, 없다면 fetch 요청
-            if (bgMusicStreamUrl) startBgMusicAudio();
-            else prefetchBgStream(currentTrack?.videoId).then(ok => ok && startBgMusicAudio());
+    if (document.hidden) {
+        // 이미 스트림 URL이 확보되어 있다면 즉시 재생
+        if (isPlaying && bgMusicStreamUrl) {
+            startBgMusicAudio();
         }
     } else {
-        // 2. 포그라운드 복귀 시: YouTube 플레이어로 동기화
-        const bgPos = stopBgMusicAudio(); // 오디오 정지하고 위치값 받아옴
-        
-        if ((wasPlayingBeforeHide || bgPendingPlay) && !userPaused && player?.getPlayerState() !== 1) {
-            // YouTube 플레이어 재개
-            setTimeout(() => {
-                if (bgPos > 0) player.seekTo(bgPos, true);
-                player.playVideo();
-            }, 300);
-        }
-        wasPlayingBeforeHide = bgPendingPlay = false;
+        // 포그라운드 복귀 시 YouTube 플레이어 우선 동기화
+        const bgPos = stopBgMusicAudio();
+        if (bgPos > 0) player.seekTo(bgPos, true);
+        player.playVideo();
     }
 });
 
