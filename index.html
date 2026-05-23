@@ -1429,15 +1429,9 @@ function playTrack(track) {
   if(typeof resetAB === 'function') resetAB();
   if(typeof onTrackChanged === 'function') onTrackChanged(track);
 
-  // 백그라운드 진입 후 요청하면 늦습니다.
-  prefetchBgStream(track.videoId);
-
   if(playerReady && player) {
     player.loadVideoById(track.videoId);
     player.playVideo();
-
-    // 플레이어가 영상을 로드하는 동안 백그라운드용 스트림도 미리 요청합니다.
-    prefetchBgStream(track.videoId).catch(err => console.warn("[BG] 사전 로드 실패:", err));
 
     // 추가: 재생 시작 시 미디어 상태 명시
     if ('mediaSession' in navigator) {
@@ -4575,21 +4569,15 @@ function initBackgroundAudio() {
     function createSilentLoop() {
       const buf = bgAudioCtx.createBuffer(1, bgAudioCtx.sampleRate * 2, bgAudioCtx.sampleRate);
       const data = buf.getChannelData(0);
-      // 주파수가 거의 들리지 않는 수준의 초미세 노이즈를 넣어, 
-      // 브라우저가 "오디오가 현재 재생 중"이라고 지속적으로 착각하게 만듭니다.
+      // ★ amplitude 0.0001 (이전 1.0 × gain 0.003 = -50dB → 들림)
+      //   → 0.0001 × 0.003 = -130dB → 완전히 들리지 않음, 브라우저는 여전히 활성 오디오로 인식
       for(let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.0001;
       const src = bgAudioCtx.createBufferSource();
-      src.buffer = buf; 
-      src.loop = true;
-      
-      // 이 gainNode가 팟빵처럼 브라우저의 오디오 자원 점유권을 지켜줍니다.
+      src.buffer = buf; src.loop = true;
       const gain = bgAudioCtx.createGain();
-      gain.gain.value = 0.01; 
-      src.connect(gain); 
-      gain.connect(bgAudioCtx.destination);
-      
-      src.start(); 
-      return src;
+      gain.gain.value = 0.003;
+      src.connect(gain); gain.connect(bgAudioCtx.destination);
+      src.start(); return src;
     }
 
     bgAudioCtx.resume().then(() => {
@@ -4605,20 +4593,38 @@ function initBackgroundAudio() {
       if(bgSilentSource) { try { bgSilentSource.stop(); } catch {} bgSilentSource = null; }
     }
 
-// [안정성 최우선] 백그라운드/포그라운드 전환 관리
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-        // 이미 스트림 URL이 확보되어 있다면 즉시 재생
-        if (isPlaying && bgMusicStreamUrl) {
-            startBgMusicAudio();
+    // [안전한 백그라운드 로직]
+    document.addEventListener('visibilitychange', () => {
+        // 1. 화면이 숨겨질 때: 오디오 스트림만 '미리 준비'
+        if (document.hidden) {
+            wasPlayingBeforeHide = isPlaying;
+            if (wasPlayingBeforeHide && !userPaused && currentTrack) {
+                // 버튼 클릭 등 UI 동작이 끝난 후 실행되도록 setTimeout 사용
+                setTimeout(() => {
+                    if (!bgMusicStreamUrl || bgMusicVideoId !== currentTrack.videoId) {
+                        prefetchBgStream(currentTrack.videoId).then(ok => {
+                            if (ok && document.hidden) startBgMusicAudio();
+                        });
+                    } else {
+                        startBgMusicAudio();
+                    }
+                }, 500); // UI 스레드 점유 방지
+            }
+        } 
+        // 2. 화면이 돌아올 때: YouTube 플레이어와 상태 동기화
+        else {
+            const bgPos = stopBgMusicAudio();
+            if ((wasPlayingBeforeHide || bgPendingPlay) && !userPaused) {
+                setTimeout(() => {
+                    if (player && playerReady && player.getPlayerState() !== 1) {
+                        if (bgPos > 0) player.seekTo(bgPos, true);
+                        player.playVideo();
+                    }
+                }, 500); // 전환 시 UI 렌더링 후 재생
+            }
+            wasPlayingBeforeHide = bgPendingPlay = false;
         }
-    } else {
-        // 포그라운드 복귀 시 YouTube 플레이어 우선 동기화
-        const bgPos = stopBgMusicAudio();
-        if (bgPos > 0) player.seekTo(bgPos, true);
-        player.playVideo();
-    }
-});
+    });
 
     window.addEventListener('pagehide', () => {
       if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
