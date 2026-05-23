@@ -1429,6 +1429,9 @@ function playTrack(track) {
   if(typeof resetAB === 'function') resetAB();
   if(typeof onTrackChanged === 'function') onTrackChanged(track);
 
+  // 백그라운드 진입 후 요청하면 늦습니다.
+  prefetchBgStream(track.videoId);
+
   if(playerReady && player) {
     player.loadVideoById(track.videoId);
     player.playVideo();
