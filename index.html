@@ -4401,39 +4401,33 @@ const BG_STREAM_APIS = [
   id => `https://invidious.nerdvpn.de/api/v1/videos/${id}?fields=adaptiveFormats`,
 ];
 
+// 기존 prefetchBgStream을 아래와 같이 더 안정적으로 교체하세요
 async function prefetchBgStream(videoId) {
-  if(!videoId) return;
-  if(bgMusicVideoId === videoId && bgMusicStreamUrl) return; // 이미 URL 있음
-  if(bgFetching && bgMusicVideoId === videoId) return; // 이미 페치 중
+  if(!videoId) return false;
   bgFetching = true;
-  bgMusicStreamUrl = null;
-  bgMusicVideoId = videoId;
-  let found = false;
+  
   for(const apiUrl of BG_STREAM_APIS) {
     try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 6000);
-      const res = await fetch(apiUrl(videoId), { signal: ctrl.signal });
-      clearTimeout(t);
+      const res = await fetch(apiUrl(videoId), { signal: AbortSignal.timeout(5000) });
       if(!res.ok) continue;
       const data = await res.json();
-      // Piped: data.audioStreams / Invidious: data.adaptiveFormats
+      
+      // Piped API의 다양한 응답 구조 대응
       const streams = (data.audioStreams || data.adaptiveFormats || [])
         .filter(s => s.url && (s.mimeType || s.type || '').includes('audio'))
         .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+
       if(streams[0]?.url) {
         bgMusicStreamUrl = streams[0].url;
-        found = true;
-        // 이미 백그라운드 상태이면 즉시 재생 시작
-        if(document.hidden && (isPlaying || bgPendingPlay) && !userPaused) {
-          startBgMusicAudio();
-        }
-        break;
+        bgMusicVideoId = videoId;
+        bgFetching = false;
+        return true; 
       }
-    } catch(e) { /* 다음 API 시도 */ }
+    } catch(e) { continue; }
   }
   bgFetching = false;
-  if(!found) showToast('⚠ 스트림 URL 없음 (API 불가)');
+  showToast('⚠ 스트림 서버 연결 실패');
+  return false;
 }
 
 function getBgMusicAudio() {
