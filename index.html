@@ -4569,15 +4569,21 @@ function initBackgroundAudio() {
     function createSilentLoop() {
       const buf = bgAudioCtx.createBuffer(1, bgAudioCtx.sampleRate * 2, bgAudioCtx.sampleRate);
       const data = buf.getChannelData(0);
-      // ★ amplitude 0.0001 (이전 1.0 × gain 0.003 = -50dB → 들림)
-      //   → 0.0001 × 0.003 = -130dB → 완전히 들리지 않음, 브라우저는 여전히 활성 오디오로 인식
+      // 주파수가 거의 들리지 않는 수준의 초미세 노이즈를 넣어, 
+      // 브라우저가 "오디오가 현재 재생 중"이라고 지속적으로 착각하게 만듭니다.
       for(let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.0001;
       const src = bgAudioCtx.createBufferSource();
-      src.buffer = buf; src.loop = true;
+      src.buffer = buf; 
+      src.loop = true;
+      
+      // 이 gainNode가 팟빵처럼 브라우저의 오디오 자원 점유권을 지켜줍니다.
       const gain = bgAudioCtx.createGain();
-      gain.gain.value = 0.003;
-      src.connect(gain); gain.connect(bgAudioCtx.destination);
-      src.start(); return src;
+      gain.gain.value = 0.01; 
+      src.connect(gain); 
+      gain.connect(bgAudioCtx.destination);
+      
+      src.start(); 
+      return src;
     }
 
     bgAudioCtx.resume().then(() => {
