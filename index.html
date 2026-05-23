@@ -4567,6 +4567,27 @@ function initBackgroundAudio() {
     } catch(e) { console.warn("백그라운드 엔진 초기화 실패", e); }
 }
 
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        // 백그라운드 진입 시: 재생 상태 유지 시도
+        wasPlayingBeforeHide = isPlaying;
+        if (wasPlayingBeforeHide && !userPaused) {
+            if (bgMusicStreamUrl) startBgMusicAudio();
+            else prefetchBgStream(currentTrack?.videoId).then(ok => ok && startBgMusicAudio());
+        }
+    } else {
+        // 포그라운드 복귀 시: 정지 후 재개
+        const bgPos = stopBgMusicAudio();
+        if ((wasPlayingBeforeHide || bgPendingPlay) && !userPaused) {
+            setTimeout(() => {
+                if (bgPos > 0) player.seekTo(bgPos, true);
+                player.playVideo();
+            }, 300);
+        }
+        wasPlayingBeforeHide = bgPendingPlay = false;
+    }
+});
+
 // 초기화 호출 (최초 터치/클릭 시 실행)
 document.addEventListener('click', () => {
     initBackgroundAudio();
