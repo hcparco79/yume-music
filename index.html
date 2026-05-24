@@ -2481,44 +2481,14 @@ function updateMediaSession(track) {
 
     // 모든 액션 핸들러 등록
     const handlers = {
-      'play': () => {
-        userPaused = false;
-        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; // 강제 고정
-        bgPendingPlay = true; // 포그라운드 복귀 시 재개 트리거
-        if(document.hidden) {
-          // 백그라운드: Piped/Invidious <audio> 스트림으로 즉시 재생 시도
-          const started = startBgMusicAudio();
-          if(started) {
-            // play() 호출 성공 (then에서 mediaSession 업데이트)
-          } else if(currentTrack?.videoId) {
-            // URL 없으면 먼저 페치 → 완료 후 prefetchBgStream 내부에서 자동 시작
-            showToast('🔄 스트림 준비 중...');
-            prefetchBgStream(currentTrack.videoId).catch(()=>{});
-          }
-        } else {
-          try { navigator.mediaSession.playbackState = 'playing'; } catch {}
-          if(player && playerReady) try { player.playVideo(); } catch {}
-        }
-      },
-      'pause': () => {
-        userPaused = true;
-        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; // 강제 고정
-        bgPendingPlay = false;
-        wasPlayingBeforeHide = false; // 사용자가 명시적으로 정지 → 복귀 후 자동재개 안 함
-        try { navigator.mediaSession.playbackState = 'paused'; } catch {}
-        if(player && playerReady) try { player.pauseVideo(); } catch {}
-      },
-      'stop': () => {
-        userPaused = true; bgPendingPlay = false; wasPlayingBeforeHide = false;
-        if(player && playerReady) player.stopVideo(); setPlayState(false);
-      },
+      'play': togglePlayPause,
+      'pause': togglePlayPause,
+      'stop': () => { userPaused = true; if(player&&playerReady) player.stopVideo(); if(typeof stopBgMusicAudio === 'function') stopBgMusicAudio(); setPlayState(false); },
       'nexttrack': () => {
         document.getElementById('btn-next').click();
-        if(document.hidden) { bgPendingPlay = true; } // 앱 복귀 시 새 트랙 재생
       },
       'previoustrack': () => {
         document.getElementById('btn-prev').click();
-        if(document.hidden) { bgPendingPlay = true; }
       },
       'seekforward':  (d)=>{ if(player&&playerReady){ const t=player.getCurrentTime()||0; player.seekTo(t+(d?.seekOffset||10),true); }},
       'seekbackward': (d)=>{ if(player&&playerReady){ const t=player.getCurrentTime()||0; player.seekTo(Math.max(0,t-(d?.seekOffset||10)),true); }},
@@ -4401,13 +4371,12 @@ let bgMusicVideoId  = null;
 let bgFetching = false; // 중복 fetch 방지 플래그
 
 const BG_STREAM_APIS = [
+  id => `https://api.piped.privacydev.net/streams/${id}`,
   id => `https://pipedapi.kavin.rocks/streams/${id}`,
   id => `https://pipedapi.tokhmi.xyz/streams/${id}`,
   id => `https://pipedapi.smnz.de/streams/${id}`,
-  id => `https://api.piped.privacydev.net/streams/${id}`,
   id => `https://piped-api.lunar.icu/streams/${id}`,
   id => `https://api.piped.projectsegfau.lt/streams/${id}`,
-  id => `https://inv.nadeko.net/api/v1/videos/${id}?fields=adaptiveFormats`,
   id => `https://inv.tux.pizza/api/v1/videos/${id}?fields=adaptiveFormats`,
   id => `https://invidious.jing.rocks/api/v1/videos/${id}?fields=adaptiveFormats`,
   id => `https://invidious.nerdvpn.de/api/v1/videos/${id}?fields=adaptiveFormats`,
@@ -4472,41 +4441,23 @@ function getBgMusicAudio() {
   return bgMusicAudio;
 }
 
-function startBgMusicAudio() {
+function startBgMusicAudio(startTime = 0) {
   if(!bgMusicStreamUrl) return false;
   try {
     const audio = getBgMusicAudio();
     audio.volume = 1.0;
-    // src가 다르거나 에러 상태면 강제 재로드
-    if(audio.src !== bgMusicStreamUrl || audio.error) {
+    if(audio.src !== bgMusicStreamUrl) {
       audio.src = bgMusicStreamUrl;
       audio.load();
     }
-    const capturedUrl = bgMusicStreamUrl; // 클로저용 스냅샷
+    if(startTime > 0) audio.currentTime = startTime;
     const playPromise = audio.play();
-    if(playPromise) {
+    if(playPromise !== undefined) {
       playPromise.then(() => {
-        // ★ play() 성공 ≠ 실제 오디오 데이터 재생
-        //   1.5초 후 currentTime이 실제로 진행됐는지 확인 후 'playing' 표시
-        const t0 = audio.currentTime;
-        setTimeout(() => {
-          // URL이 바뀌었거나 다른 곡으로 넘어갔으면 무시
-          if(!bgMusicAudio || bgMusicAudio.src !== capturedUrl) return;
-          if(!bgMusicAudio.paused && bgMusicAudio.currentTime > t0 + 0.05) {
-            // ✅ 실제로 오디오 데이터가 흐르고 있음
-            try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
-          } else {
-            // ❌ play()는 성공했지만 오디오 데이터 없음 (URL 불가/만료)
-            bgMusicAudio.pause();
-            bgMusicStreamUrl = null;
-            bgMusicVideoId = null;
-            try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
-          }
-        }, 1500);
+         setPlayState(true);
       }).catch((err) => {
-        bgMusicStreamUrl = null;
-        bgMusicVideoId = null;
-        try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
+         console.warn("Audio play failed", err);
+         setPlayState(false);
       });
     }
     return true;
@@ -4611,67 +4562,19 @@ function initBackgroundAudio() {
 
     document.addEventListener('visibilitychange', () => {
       if(document.hidden) {
-        // ★ 진입 시점의 재생 상태를 스냅샷으로 저장 (이후 isPlaying이 바뀌어도 복원 기준으로 사용)
-        wasPlayingBeforeHide = isPlaying;
-
-        // 즉시 paused 표시 — bgMusicAudio가 실제 데이터 재생 확인 후 'playing'으로 업데이트함
-        try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
-
-        // <audio> · AudioContext 유지
         if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
         if(bgAudioCtx.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
-        if(!bgSilentSource) bgSilentSource = createSilentLoop();
-
-        // keep-alive: <audio>·AudioContext 상태 주기적 확인
-        clearInterval(bgKeepAliveInterval);
-        bgKeepAliveInterval = setInterval(() => {
-          if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
-          if(bgAudioCtx?.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
-        }, 3000);
-
-        // ★ 백그라운드에서도 실제 음악 재생 유지: Piped/Invidious <audio> 스트림 시작
-        if(wasPlayingBeforeHide && !userPaused) {
-          if(bgMusicStreamUrl && bgMusicVideoId === currentTrack?.videoId) {
-            // 스트림 URL이 이미 준비된 경우 즉시 시작
-            startBgMusicAudio();
-          } else if(currentTrack?.videoId) {
-            // 아직 없으면 페치 (처음 재생 or 곡 변경 직후)
-            prefetchBgStream(currentTrack.videoId).catch(()=>{});
-          }
-        }
-
         if(pipEnabled && currentTrack && isPlaying) showPipWidget();
       } else {
-        // ─── 포그라운드 복귀 ───────────────────────────────────────
-        clearInterval(bgKeepAliveInterval);
         hidePipWidget();
-
-        // wasPlayingBeforeHide: 이 값으로 resume 여부 결정 (isPlaying은 백그라운드 중 변질될 수 있음)
-        const shouldResume = wasPlayingBeforeHide || bgPendingPlay;
-        wasPlayingBeforeHide = false;
-        bgPendingPlay = false;
-
-        // ★ bg <audio> 스트림 정지 & 재생 위치 동기화
-        const bgPos = stopBgMusicAudio();
-
-        if(shouldResume && !userPaused) {
-          // 100ms 부터 빠르게 재개 시도 (bgPos > 0 이면 YouTube 위치도 맞춤)
-          [100, 400, 900, 2000].forEach(delay => {
-            setTimeout(() => {
-              if(userPaused || !player || !playerReady) return;
-              try {
-                const s = player.getPlayerState();
-                if(s !== 1) { // 1 = PLAYING 이 아닐 때만
-                  if(bgPos > 0 && delay === 100) {
-                    // bg <audio>에서 재생 중이던 위치로 YouTube 이어 재생
-                    try { player.seekTo(bgPos, true); } catch {}
-                  }
-                  player.playVideo();
-                  if(delay >= 400) showToast('▶ 재생 재개');
-                }
-              } catch {}
-            }, delay);
-          });
+        const audio = getBgMusicAudio();
+        if (audio && !audio.paused) {
+           const bgTime = audio.currentTime;
+           audio.pause();
+           if(player && playerReady && !userPaused) {
+              player.seekTo(bgTime, true);
+              player.playVideo();
+           }
         }
       }
     });
