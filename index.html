@@ -1138,17 +1138,7 @@ window.onYouTubeIframeAPIReady = function() {
           if(!userPaused) {
             setTimeout(() => {
               if(userPaused || !player || !playerReady) return;
-              if(document.hidden) {
-                // OS가 백그라운드 상태에서 유튜브 IFrame을 강제 정지시켰을 때 끊김없이 오디오로 전환(핸드오프)
-                if (bgMusicStreamUrl && bgMusicVideoId === currentTrack?.videoId) {
-                   startBgMusicAudio(player.getCurrentTime());
-                } else if (currentTrack?.videoId) {
-                   prefetchBgStream(currentTrack.videoId).then(success => {
-                      if (success && document.hidden && !userPaused) startBgMusicAudio(player.getCurrentTime());
-                      else if (!success && player && playerReady) player.playVideo(); // API 실패 시 유튜브 재생 시도 (일부 브라우저에서 가능)
-                   });
-                }
-              } else {
+              if(!document.hidden) {
                 setPlayState(false); stopProgress();
                 if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
               }
