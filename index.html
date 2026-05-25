@@ -1136,19 +1136,36 @@ window.onYouTubeIframeAPIReady = function() {
         }
         else if(e.data === S.PAUSED){
           if(!userPaused) {
-            setTimeout(() => {
-              if(userPaused || !player || !playerReady) return;
-              if(!document.hidden) {
+            // 사용자가 직접 일시정지한 것이 아니고, 화면이 숨겨진 상태라면 백그라운드 오디오로 전환 시도
+            // (OS가 YouTube IFrame을 강제 정지시켰을 가능성)
+              if(document.hidden) {
+                if (bgMusicStreamUrl && bgMusicVideoId === currentTrack?.videoId) {
+                   startBgMusicAudio(player.getCurrentTime());
+                } else if (currentTrack?.videoId) {
+                   prefetchBgStream(currentTrack.videoId).then(success => {
+                      if (success && document.hidden && !userPaused) startBgMusicAudio(player.getCurrentTime());
+                      else { // API 실패 시
+                        setPlayState(false); // 명시적으로 일시정지 상태로 설정
+                        if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+                        showToast('⚠ 스트림 연결 실패. 앱을 열어주세요.');
+                      }
+                   }).catch(() => { // prefetchBgStream 자체에서 오류 발생 시
+                     setPlayState(false);
+                     if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+                     showToast('⚠ 스트림 추출 실패 (앱을 열어주세요)');
+                   });
+                }
+              } else {
                 setPlayState(false); stopProgress();
                 if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
               }
-            }, 500);
           } else {
             setPlayState(false);
             stopProgress();
             if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
           }
         }
+
         else if(e.data === S.ENDED){ handleEnded(); }
       }
     }
@@ -1437,19 +1454,27 @@ function playTrack(track) {
   updateMediaSession(track);
   if(typeof resetAB === 'function') resetAB();
   if(typeof onTrackChanged === 'function') onTrackChanged(track);
+  userPaused = false; // 새 곡 재생 시 userPaused 초기화
 
   if(playerReady && player) {
-    player.loadVideoById(track.videoId);
-    player.playVideo();
-
-    // 추가: 재생 시작 시 미디어 상태 명시
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = 'playing';
-
+    if (document.hidden && typeof prefetchBgStream === 'function') {
+      // 백그라운드 상태에서 다음 곡으로 넘어갈 때는 유튜브 재생을 건너뛰고 오디오 스트림 추출
+      setPlayState(true); // 일단 재생 상태로 설정 (스트림 성공 시 유지, 실패 시 변경)
+      prefetchBgStream(track.videoId).then(success => {
+        if(success && document.hidden && !userPaused) startBgMusicAudio();
+        else if(!success) { setPlayState(false); showToast('⚠ 스트림 연결 실패. 앱을 열어주세요.'); }
+      }).catch(() => { // prefetchBgStream 자체에서 오류 발생 시
+        setPlayState(false); showToast('⚠ 스트림 추출 실패 (앱을 열어주세요)');
+      });
+    } else {
+      player.loadVideoById(track.videoId);
+      player.playVideo();
+      if(typeof prefetchBgStream === 'function') prefetchBgStream(track.videoId).catch(()=>{}); // 포그라운드에서도 백그라운드 전환 대비 미리 페치
+    }
   } else {
     pendingVideoId = track.videoId;
+
   }
-}
 }
 
 function playQueue(tracks, startIndex=0) {
@@ -1545,36 +1570,33 @@ document.getElementById('np-progress-bar').addEventListener('click', function(e)
   player.seekTo(pct * (player.getDuration()||0), true);
 });
 
-// [최종 버튼 클릭 관리자]
-document.body.addEventListener('click', (e) => {
-    // 1. 버튼 찾기 (클릭된 곳이 버튼이거나 버튼 내부의 SVG/아이콘일 경우 처리)
-    const btn = e.target.closest('button');
-    if (!btn) return;
+function togglePlayPause() {
+  if(!player||!playerReady) return;
+  const isIframePlaying = player.getPlayerState() === 1;
+  const audio = typeof getBgMusicAudio === 'function' ? getBgMusicAudio() : null;
+  const isAudioPlaying = audio && !audio.paused;
 
-  
+  if(isIframePlaying || isAudioPlaying) {
+    userPaused = true;
+    if(isIframePlaying) player.pauseVideo();
+    if(isAudioPlaying) audio.pause();
+    setPlayState(false);
+  } else {
+    userPaused = false;
+    if(document.hidden && typeof prefetchBgStream === 'function') {
+      if(bgMusicStreamUrl && bgMusicVideoId === currentTrack?.videoId) {
+         startBgMusicAudio();
+      } else if (currentTrack?.videoId) {
+         showToast('스트림 연결 중...');
+         prefetchBgStream(currentTrack.videoId).then(success => {
+            if(success && document.hidden && !userPaused) startBgMusicAudio();
+            else if(!success)
 
-    switch(btn.id) {
-        // --- [플레이어 제어] ---
-        case 'btn-play-pause': isPlaying ? player.pauseVideo() : player.playVideo(); break;
-        case 'btn-prev': if(queueIndex > 0){ queueIndex--; playTrack(queue[queueIndex]); } else if(playerReady) player.seekTo(0,true); break;
-        case 'btn-next': if(queueIndex < queue.length-1){ queueIndex++; playTrack(queue[queueIndex]); } break;
-        case 'btn-mute': player.isMuted() ? player.unMute() : player.mute(); break;
-
-        // --- [탭/메뉴 내비게이션] ---
-        case 'nav-home': case 'btn-home': case 'tab-home': showView('home'); renderHomeViews(); break;
-        case 'nav-liked': case 'btn-liked': case 'tab-liked': showView('liked'); renderLikedView(); break;
-        case 'tab-search': showView('search'); break;
-        case 'tab-playlists': showView('playlists'); renderMobilePlaylists(); break;
-        case 'tab-lyrics': showView('lyrics'); break;
-        case 'btn-np-lyrics': /* 가사 패널 로직 */ break;
-        case 'btn-settings': /* 설정 로직 */ break;
-        
-        // --- [기능 버튼] ---
-        case 'search-btn': doSearch(document.getElementById('search-input').value); break;
-        case 'btn-new-playlist': document.getElementById('modal-new-playlist').classList.remove('hidden'); break;
-        default: console.log("매핑되지 않은 버튼:", btn.id);
     }
-});
+  )}
+}
+  }
+};
 
 // NP sidebar actions
 document.getElementById('np-like').addEventListener('click', () => { if(currentTrack) toggleLike(currentTrack); });
@@ -4609,32 +4631,71 @@ function initBackgroundAudio() {
       if(bgSilentSource) { try { bgSilentSource.stop(); } catch {} bgSilentSource = null; }
     }
 
-    // 기존의 visibilitychange 전체를 이 코드로 교체하세요
     document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-            // [백그라운드 진입]
-            wasPlayingBeforeHide = isPlaying;
-            if (wasPlayingBeforeHide && !userPaused) {
-                // 스트림이 있으면 즉시, 없으면 최대한 빨리 확보하여 오디오 유지
-                if (bgMusicStreamUrl) {
-                    startBgMusicAudio();
-                } else {
-                    prefetchBgStream(currentTrack?.videoId).then(() => startBgMusicAudio());
-                }
-            }
-        } else {
-            // [포그라운드 복귀]
-            const bgPos = stopBgMusicAudio();
-            // 1초 뒤에 플레이어 재개 (OS가 웹뷰 스레드를 깨울 시간 확보)
-            setTimeout(() => {
-                if (!userPaused && player?.getPlayerState() !== 1) {
-                    if (bgPos > 0) player.seekTo(bgPos, true);
-                    player.playVideo();
-                    showToast('▶ 재생 재개');
-                }
-            }, 1000);
-            wasPlayingBeforeHide = bgPendingPlay = false;
+      if(document.hidden) {
+        // ★ 진입 시점의 재생 상태를 스냅샷으로 저장 (이후 isPlaying이 바뀌어도 복원 기준으로 사용)
+        wasPlayingBeforeHide = isPlaying;
+
+        // 즉시 paused 표시 — bgMusicAudio가 실제 데이터 재생 확인 후 'playing'으로 업데이트함
+        try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
+
+        // <audio> · AudioContext 유지
+        if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
+        if(bgAudioCtx.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
+        if(!bgSilentSource) bgSilentSource = createSilentLoop();
+
+        // keep-alive: <audio>·AudioContext 상태 주기적 확인
+        clearInterval(bgKeepAliveInterval);
+        bgKeepAliveInterval = setInterval(() => {
+          if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
+          if(bgAudioCtx?.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
+        }, 3000);
+
+        // ★ 백그라운드에서도 실제 음악 재생 유지: Piped/Invidious <audio> 스트림 시작
+        if(wasPlayingBeforeHide && !userPaused) {
+          if(bgMusicStreamUrl && bgMusicVideoId === currentTrack?.videoId) {
+            // 스트림 URL이 이미 준비된 경우 즉시 시작
+            startBgMusicAudio();
+          } else if(currentTrack?.videoId) {
+            // 아직 없으면 페치 (처음 재생 or 곡 변경 직후)
+            prefetchBgStream(currentTrack.videoId).catch(()=>{});
+          }
         }
+
+        if(pipEnabled && currentTrack && isPlaying) showPipWidget();
+      } else {
+        // ─── 포그라운드 복귀 ───────────────────────────────────────
+        clearInterval(bgKeepAliveInterval);
+        hidePipWidget();
+
+        // wasPlayingBeforeHide: 이 값으로 resume 여부 결정 (isPlaying은 백그라운드 중 변질될 수 있음)
+        const shouldResume = wasPlayingBeforeHide || bgPendingPlay;
+        wasPlayingBeforeHide = false;
+        bgPendingPlay = false;
+
+        // ★ bg <audio> 스트림 정지 & 재생 위치 동기화
+        const bgPos = stopBgMusicAudio();
+
+        if(shouldResume && !userPaused) {
+          // 100ms 부터 빠르게 재개 시도 (bgPos > 0 이면 YouTube 위치도 맞춤)
+          [100, 400, 900, 2000].forEach(delay => {
+            setTimeout(() => {
+              if(userPaused || !player || !playerReady) return;
+              try {
+                const s = player.getPlayerState();
+                if(s !== 1) { // 1 = PLAYING 이 아닐 때만
+                  if(bgPos > 0 && delay === 100) {
+                    // bg <audio>에서 재생 중이던 위치로 YouTube 이어 재생
+                    try { player.seekTo(bgPos, true); } catch {}
+                  }
+                  player.playVideo();
+                  if(delay >= 400) showToast('▶ 재생 재개');
+                }
+              } catch {}
+            }, delay);
+          });
+        }
+      }
     });
 
     window.addEventListener('pagehide', () => {
