@@ -1438,6 +1438,9 @@ function playTrack(track) {
   if(typeof resetAB === 'function') resetAB();
   if(typeof onTrackChanged === 'function') onTrackChanged(track);
 
+  // ★ 추가: 다음 곡 미리 가져오기 호출
+  triggerNextTrackPrefetch();
+
   if(playerReady && player) {
     player.loadVideoById(track.videoId);
     player.playVideo();
@@ -1445,11 +1448,10 @@ function playTrack(track) {
     // 추가: 재생 시작 시 미디어 상태 명시
     if ('mediaSession' in navigator) {
       navigator.mediaSession.playbackState = 'playing';
-
+    }
   } else {
     pendingVideoId = track.videoId;
   }
-}
 }
 
 function playQueue(tracks, startIndex=0) {
@@ -2438,6 +2440,24 @@ function renderQueueList() {
     el.appendChild(div);
   });
 }
+
+/**
+ * 대기열에서 다음 곡을 찾아 URL을 미리 확보하는 함수
+ */
+function triggerNextTrackPrefetch() {
+  // 현재 queue와 queueIndex가 존재할 때 다음 곡 확인
+  if (queue && queueIndex !== undefined && queueIndex < queue.length - 1) {
+    const nextTrack = queue[queueIndex + 1];
+    if (nextTrack && nextTrack.videoId) {
+      console.log("[Look-ahead] 다음 곡 프리패치 시작:", nextTrack.title);
+      // shouldAutoPlay를 false로 주어 URL만 가져오고 재생은 하지 않음
+      prefetchBgStream(nextTrack.videoId, false).catch(err => {
+        console.warn("[Look-ahead] 프리패치 실패:", err);
+      });
+    }
+  }
+}
+
 
 // ============================================================
 // TOAST
@@ -4421,8 +4441,17 @@ const BG_STREAM_APIS = [
   id => `https://invidious.nerdvpn.de/api/v1/videos/${id}?fields=adaptiveFormats`,
 ];
 
-async function prefetchBgStream(videoId) {
+const streamCache = new Map();
+
+async function prefetchBgStream(videoId, shouldAutoPlay = false) {
   if(!videoId) return false;
+  // 1. 이미 캐시에 있으면 즉시 반환
+  if (streamCache.has(videoId)) {
+    bgMusicStreamUrl = streamCache.get(videoId);
+    bgMusicVideoId = videoId;
+    return true;
+  }
+
   if(bgMusicVideoId === videoId && bgMusicStreamUrl) return true;
   if(bgFetching && bgMusicVideoId === videoId) return false;
   bgFetching = true;
@@ -4443,9 +4472,11 @@ async function prefetchBgStream(videoId) {
         .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
       if(streams[0]?.url) {
         bgMusicStreamUrl = streams[0].url;
+        bgMusicVideoId = videoId;
         found = true;
-        // 이미 백그라운드 상태이면 즉시 재생 시작
-        if(document.hidden && (isPlaying || bgPendingPlay) && !userPaused) {
+        streamCache.set(videoId, bgMusicStreamUrl); // ★ 캐시 저장
+        // ★ 여기가 핵심: shouldAutoPlay가 true일 때만 백그라운드 재생 시도
+        if (shouldAutoPlay && document.hidden && (isPlaying || bgPendingPlay) && !userPaused) {
           startBgMusicAudio();
         }
         break;
