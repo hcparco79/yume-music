@@ -2481,33 +2481,22 @@ function updateMediaSession(track) {
 
     // 모든 액션 핸들러 등록
     const handlers = {
+      // 'play' 핸들러 수정
       'play': async () => {
-        userPaused = false;
-        
-        // 1. 이미 재생 중이라면 무시
-        if (bgMusicAudio && !bgMusicAudio.paused) return;
-
-        // 2. 스트림 URL이 없거나 곡이 바뀌었다면 다시 페치
-        if (!bgMusicStreamUrl || bgMusicVideoId !== currentTrack?.videoId) {
-          const success = await prefetchBgStream(currentTrack.videoId);
-          if (!success) {
-            showToast('⚠ 재생할 수 없습니다.');
-            return;
+          userPaused = false;
+          
+          // 1. AudioContext가 suspended 상태라면 강제 재개 (소리가 안 나는 주원인)
+          if (bgAudioCtx && bgAudioCtx.state === 'suspended') {
+              await bgAudioCtx.resume();
           }
-        }
 
-        // 3. 재연결 및 재생 시도
-        // 'play' 핸들러 끝부분 수정
-        const started = startBgMusicAudio();
-        if (started) {
-        // 브라우저가 잠금 화면 상태를 즉시 갱신하도록 강제
-        navigator.mediaSession.playbackState = 'playing'; 
-        setPlayState(true);
-        } else {
-        // 실패 시 다시 일시정지 상태로 돌려서 UI 꼬임 방지
-        navigator.mediaSession.playbackState = 'paused';
-        setPlayState(false);
-        }
+          // 2. 스트림이 있다면 즉시 재생, 없다면 재페치
+          if (bgMusicStreamUrl) {
+              startBgMusicAudio();
+          } else {
+              await prefetchBgStream(currentTrack.videoId);
+              startBgMusicAudio();
+          }
       },
       'pause': () => {
         userPaused = true;
@@ -4502,7 +4491,7 @@ function startBgMusicAudio() {
       audio.load();
     }
     const capturedUrl = bgMusicStreamUrl; // 클로저용 스냅샷
-    
+
     // startBgMusicAudio 내 로직 수정
     const playPromise = bgMusicAudio.play();
     if (playPromise) {
