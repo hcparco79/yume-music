@@ -4609,71 +4609,32 @@ function initBackgroundAudio() {
       if(bgSilentSource) { try { bgSilentSource.stop(); } catch {} bgSilentSource = null; }
     }
 
+    // 기존의 visibilitychange 전체를 이 코드로 교체하세요
     document.addEventListener('visibilitychange', () => {
-      if(document.hidden) {
-        // ★ 진입 시점의 재생 상태를 스냅샷으로 저장 (이후 isPlaying이 바뀌어도 복원 기준으로 사용)
-        wasPlayingBeforeHide = isPlaying;
-
-        // 즉시 paused 표시 — bgMusicAudio가 실제 데이터 재생 확인 후 'playing'으로 업데이트함
-        try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
-
-        // <audio> · AudioContext 유지
-        if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
-        if(bgAudioCtx.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
-        if(!bgSilentSource) bgSilentSource = createSilentLoop();
-
-        // keep-alive: <audio>·AudioContext 상태 주기적 확인
-        clearInterval(bgKeepAliveInterval);
-        bgKeepAliveInterval = setInterval(() => {
-          if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
-          if(bgAudioCtx?.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
-        }, 3000);
-
-        // ★ 백그라운드에서도 실제 음악 재생 유지: Piped/Invidious <audio> 스트림 시작
-        if(wasPlayingBeforeHide && !userPaused) {
-          if(bgMusicStreamUrl && bgMusicVideoId === currentTrack?.videoId) {
-            // 스트림 URL이 이미 준비된 경우 즉시 시작
-            startBgMusicAudio();
-          } else if(currentTrack?.videoId) {
-            // 아직 없으면 페치 (처음 재생 or 곡 변경 직후)
-            prefetchBgStream(currentTrack.videoId).catch(()=>{});
-          }
-        }
-
-        if(pipEnabled && currentTrack && isPlaying) showPipWidget();
-      } else {
-        // ─── 포그라운드 복귀 ───────────────────────────────────────
-        clearInterval(bgKeepAliveInterval);
-        hidePipWidget();
-
-        // wasPlayingBeforeHide: 이 값으로 resume 여부 결정 (isPlaying은 백그라운드 중 변질될 수 있음)
-        const shouldResume = wasPlayingBeforeHide || bgPendingPlay;
-        wasPlayingBeforeHide = false;
-        bgPendingPlay = false;
-
-        // ★ bg <audio> 스트림 정지 & 재생 위치 동기화
-        const bgPos = stopBgMusicAudio();
-
-        if(shouldResume && !userPaused) {
-          // 100ms 부터 빠르게 재개 시도 (bgPos > 0 이면 YouTube 위치도 맞춤)
-          [100, 400, 900, 2000].forEach(delay => {
-            setTimeout(() => {
-              if(userPaused || !player || !playerReady) return;
-              try {
-                const s = player.getPlayerState();
-                if(s !== 1) { // 1 = PLAYING 이 아닐 때만
-                  if(bgPos > 0 && delay === 100) {
-                    // bg <audio>에서 재생 중이던 위치로 YouTube 이어 재생
-                    try { player.seekTo(bgPos, true); } catch {}
-                  }
-                  player.playVideo();
-                  if(delay >= 400) showToast('▶ 재생 재개');
+        if (document.hidden) {
+            // [백그라운드 진입]
+            wasPlayingBeforeHide = isPlaying;
+            if (wasPlayingBeforeHide && !userPaused) {
+                // 스트림이 있으면 즉시, 없으면 최대한 빨리 확보하여 오디오 유지
+                if (bgMusicStreamUrl) {
+                    startBgMusicAudio();
+                } else {
+                    prefetchBgStream(currentTrack?.videoId).then(() => startBgMusicAudio());
                 }
-              } catch {}
-            }, delay);
-          });
+            }
+        } else {
+            // [포그라운드 복귀]
+            const bgPos = stopBgMusicAudio();
+            // 1초 뒤에 플레이어 재개 (OS가 웹뷰 스레드를 깨울 시간 확보)
+            setTimeout(() => {
+                if (!userPaused && player?.getPlayerState() !== 1) {
+                    if (bgPos > 0) player.seekTo(bgPos, true);
+                    player.playVideo();
+                    showToast('▶ 재생 재개');
+                }
+            }, 1000);
+            wasPlayingBeforeHide = bgPendingPlay = false;
         }
-      }
     });
 
     window.addEventListener('pagehide', () => {
