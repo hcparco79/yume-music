@@ -2481,33 +2481,40 @@ function updateMediaSession(track) {
 
     // 모든 액션 핸들러 등록
     const handlers = {
-      'play': () => {
+      'play': async () => {
         userPaused = false;
-        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; // 강제 고정
-        bgPendingPlay = true; // 포그라운드 복귀 시 재개 트리거
-        if(document.hidden) {
-          // 백그라운드: Piped/Invidious <audio> 스트림으로 즉시 재생 시도
-          const started = startBgMusicAudio();
-          if(started) {
-            // play() 호출 성공 (then에서 mediaSession 업데이트)
-          } else if(currentTrack?.videoId) {
-            // URL 없으면 먼저 페치 → 완료 후 prefetchBgStream 내부에서 자동 시작
-            showToast('🔄 스트림 준비 중...');
-            prefetchBgStream(currentTrack.videoId).catch(()=>{});
+        
+        // 1. 이미 재생 중이라면 무시
+        if (bgMusicAudio && !bgMusicAudio.paused) return;
+
+        // 2. 스트림 URL이 없거나 곡이 바뀌었다면 다시 페치
+        if (!bgMusicStreamUrl || bgMusicVideoId !== currentTrack?.videoId) {
+          const success = await prefetchBgStream(currentTrack.videoId);
+          if (!success) {
+            showToast('⚠ 재생할 수 없습니다.');
+            return;
           }
-        } else {
-          try { navigator.mediaSession.playbackState = 'playing'; } catch {}
-          if(player && playerReady) try { player.playVideo(); } catch {}
+        }
+
+        // 3. 재연결 및 재생 시도
+        const started = startBgMusicAudio();
+        if (started) {
+          navigator.mediaSession.playbackState = 'playing';
+          // UI 동기화
+          setPlayState(true);
         }
       },
       'pause': () => {
-        userPaused = true;
-        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; // 강제 고정
-        bgPendingPlay = false;
-        wasPlayingBeforeHide = false; // 사용자가 명시적으로 정지 → 복귀 후 자동재개 안 함
-        try { navigator.mediaSession.playbackState = 'paused'; } catch {}
-        if(player && playerReady) try { player.pauseVideo(); } catch {}
-      },
+          userPaused = true;
+          bgPendingPlay = false;
+          wasPlayingBeforeHide = false;
+          
+          // 네이티브 재생 정지
+          if (bgMusicAudio) bgMusicAudio.pause();
+          
+          navigator.mediaSession.playbackState = 'paused';
+          setPlayState(false);
+        },
       'stop': () => {
         userPaused = true; bgPendingPlay = false; wasPlayingBeforeHide = false;
         if(player && playerReady) player.stopVideo(); setPlayState(false);
@@ -2524,7 +2531,11 @@ function updateMediaSession(track) {
       'seekbackward': (d)=>{ if(player&&playerReady){ const t=player.getCurrentTime()||0; player.seekTo(Math.max(0,t-(d?.seekOffset||10)),true); }},
     };
     Object.entries(handlers).forEach(([action, handler]) => {
-      try { navigator.mediaSession.setActionHandler(action, handler); } catch {}
+      try { 
+        navigator.mediaSession.setActionHandler(action, handler); 
+      } catch (e) {
+        console.warn(`이 브라우저는 ${action} 액션을 지원하지 않습니다.`);
+      }
     });
 
     // 진행바 업데이트 (지원하는 브라우저에서 잠금화면에 표시)
