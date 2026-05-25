@@ -4445,7 +4445,7 @@ const streamCache = new Map();
 
 async function prefetchBgStream(videoId, shouldAutoPlay = false) {
   if(!videoId) return false;
-  // 1. 이미 캐시에 있으면 즉시 반환
+  
   if (streamCache.has(videoId)) {
     bgMusicStreamUrl = streamCache.get(videoId);
     bgMusicVideoId = videoId;
@@ -4454,38 +4454,51 @@ async function prefetchBgStream(videoId, shouldAutoPlay = false) {
 
   if(bgMusicVideoId === videoId && bgMusicStreamUrl) return true;
   if(bgFetching && bgMusicVideoId === videoId) return false;
+  
   bgFetching = true;
   bgMusicStreamUrl = null;
   bgMusicVideoId = videoId;
   let found = false;
+
+  // 추가: CORS 우회를 위한 프록시 URL 설정
+  const PROXY_URL = 'https://api.allorigins.win/get?url=';
+
   for(const apiUrl of BG_STREAM_APIS) {
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 6000);
-      const res = await fetch(apiUrl(videoId), { signal: ctrl.signal });
+      
+      // ★ 변경된 부분: 프록시 URL을 붙여서 요청
+      const res = await fetch(PROXY_URL + encodeURIComponent(apiUrl(videoId)), { signal: ctrl.signal });
       clearTimeout(t);
+      
       if(!res.ok) continue;
-      const data = await res.json();
-      // Piped: data.audioStreams / Invidious: data.adaptiveFormats
+      
+      // ★ 변경된 부분: 프록시 응답 구조(json.contents)에 맞게 데이터 파싱
+      const json = await res.json();
+      const data = JSON.parse(json.contents);
+      
       const streams = (data.audioStreams || data.adaptiveFormats || [])
         .filter(s => s.url && (s.mimeType || s.type || '').includes('audio'))
         .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+        
       if(streams[0]?.url) {
         bgMusicStreamUrl = streams[0].url;
         bgMusicVideoId = videoId;
         found = true;
-        streamCache.set(videoId, bgMusicStreamUrl); // ★ 캐시 저장
-        // ★ 여기가 핵심: shouldAutoPlay가 true일 때만 백그라운드 재생 시도
+        streamCache.set(videoId, bgMusicStreamUrl);
+        
         if (shouldAutoPlay && document.hidden && (isPlaying || bgPendingPlay) && !userPaused) {
           startBgMusicAudio();
         }
         break;
       }
-    } catch(e) { /* 다음 API 시도 */ }
+    } catch(e) { console.warn('프록시 요청 실패:', e); /* 다음 API 시도 */ }
   }
+  
   bgFetching = false;
   if(!found) {
-    showToast('⚠ 스트림 추출 실패 (원본 재생 시도)');
+    showToast('⚠ 스트림 추출 실패');
     return false;
   }
   return true;
