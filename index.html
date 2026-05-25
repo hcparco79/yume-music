@@ -4460,29 +4460,21 @@ async function prefetchBgStream(videoId, shouldAutoPlay = false) {
   bgMusicVideoId = videoId;
   let found = false;
 
-  // 추가: CORS 우회를 위한 프록시 URL 설정
   const PROXY_URL = 'https://yume-proxy.touchmie.workers.dev/?url=';
 
   for(const apiUrl of BG_STREAM_APIS) {
     try {
       const ctrl = new AbortController();
-
-      const t = setTimeout(() => ctrl.abort(), 6000);
+      const t = setTimeout(() => ctrl.abort(), 3000); // 3초로 짧게 조정(빠른 포기)
       
-      // fetch 호출 직후
-      const res = await fetch(PROXY_URL + encodeURIComponent(apiUrl(videoId)));
-      const text = await res.text();
-      //console.log("프록시 응답 데이터:", text); // 이게 HTML이면 Worker 설정을 다시 봐야 합니다.
-      //const data = JSON.parse(text);
-      
+      const res = await fetch(PROXY_URL + encodeURIComponent(apiUrl(videoId)), { signal: ctrl.signal });
       clearTimeout(t);
       
       if(!res.ok) continue;
       
-      // ★ 변경된 부분: 프록시 응답 구조(json.contents)에 맞게 데이터 파싱
       const json = await res.json();
-      const data = JSON.parse(json.contents); //원본
-      //const data = await res.json(); //2차 수정
+      // 여기서 JSON 파싱 에러가 나면 조용히 넘어가기 위해 catch로 이동
+      const data = typeof json.contents === 'string' ? JSON.parse(json.contents) : json;
       
       const streams = (data.audioStreams || data.adaptiveFormats || [])
         .filter(s => s.url && (s.mimeType || s.type || '').includes('audio'))
@@ -4499,15 +4491,14 @@ async function prefetchBgStream(videoId, shouldAutoPlay = false) {
         }
         break;
       }
-    } catch(e) { console.warn('프록시 요청 실패:', e); /* 다음 API 시도 */ }
+    } catch(e) { 
+      // 에러 로그를 아예 삭제하여 콘솔을 깨끗하게 유지
+      continue; 
+    }
   }
   
   bgFetching = false;
-  if(!found) {
-    showToast('⚠ 스트림 추출 실패');
-    return false;
-  }
-  return true;
+  return found; // 실패해도 토스트 알림 없이 조용히 종료
 }
 
 function getBgMusicAudio() {
