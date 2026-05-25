@@ -2497,24 +2497,32 @@ function updateMediaSession(track) {
         }
 
         // 3. 재연결 및 재생 시도
+        // 'play' 핸들러 끝부분 수정
         const started = startBgMusicAudio();
         if (started) {
-          navigator.mediaSession.playbackState = 'playing';
-          // UI 동기화
-          setPlayState(true);
+        // 브라우저가 잠금 화면 상태를 즉시 갱신하도록 강제
+        navigator.mediaSession.playbackState = 'playing'; 
+        setPlayState(true);
+        } else {
+        // 실패 시 다시 일시정지 상태로 돌려서 UI 꼬임 방지
+        navigator.mediaSession.playbackState = 'paused';
+        setPlayState(false);
         }
       },
       'pause': () => {
-          userPaused = true;
-          bgPendingPlay = false;
-          wasPlayingBeforeHide = false;
-          
-          // 네이티브 재생 정지
-          if (bgMusicAudio) bgMusicAudio.pause();
-          
-          navigator.mediaSession.playbackState = 'paused';
-          setPlayState(false);
-        },
+        userPaused = true;
+        bgPendingPlay = false;
+        wasPlayingBeforeHide = false;
+        
+        if (bgMusicAudio) {
+          bgMusicAudio.pause();
+          bgMusicAudio.currentTime = 0; // 시작점으로 이동시켜 좀비 상태 탈출
+        }
+        
+        // 미디어 세션 상태를 확실하게 'paused'로 명시
+        navigator.mediaSession.playbackState = 'paused';
+        setPlayState(false);
+      },
       'stop': () => {
         userPaused = true; bgPendingPlay = false; wasPlayingBeforeHide = false;
         if(player && playerReady) player.stopVideo(); setPlayState(false);
@@ -4494,31 +4502,38 @@ function startBgMusicAudio() {
       audio.load();
     }
     const capturedUrl = bgMusicStreamUrl; // 클로저용 스냅샷
-    const playPromise = audio.play();
-    if(playPromise) {
-      playPromise.then(() => {
-        // ★ play() 성공 ≠ 실제 오디오 데이터 재생
-        //   1.5초 후 currentTime이 실제로 진행됐는지 확인 후 'playing' 표시
-        const t0 = audio.currentTime;
-        setTimeout(() => {
-          // URL이 바뀌었거나 다른 곡으로 넘어갔으면 무시
-          if(!bgMusicAudio || bgMusicAudio.src !== capturedUrl) return;
-          if(!bgMusicAudio.paused && bgMusicAudio.currentTime > t0 + 0.05) {
-            // ✅ 실제로 오디오 데이터가 흐르고 있음
-            try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; } catch {}
-          } else {
-            // ❌ play()는 성공했지만 오디오 데이터 없음 (URL 불가/만료)
-            bgMusicAudio.pause();
+    
+    // startBgMusicAudio 내 로직 수정
+    const playPromise = bgMusicAudio.play();
+    if (playPromise) {
+        playPromise.then(() => {
+            const t0 = bgMusicAudio.currentTime;
+            console.log("[BG] 재생 시도 성공, 데이터 확인 중...");
+            
+            setTimeout(() => {
+                if (!bgMusicAudio || bgMusicAudio.src !== capturedUrl) return;
+
+                // 재생이 확인되면
+                if (!bgMusicAudio.paused && bgMusicAudio.currentTime > t0 + 0.05) {
+                    console.log("[BG] ✅ 재생 확인 완료");
+                    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+                    setPlayState(true);
+                } else {
+                    console.warn("[BG] ❌ 재생 실패: 데이터를 받지 못함");
+                    // 버튼이 꼬이지 않게 명시적으로 일시정지 상태임을 다시 선언
+                    bgMusicAudio.pause();
+                    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+                    setPlayState(false);
+                    showToast('⚠ 재생 연결 실패, 다시 눌러주세요');
+                }
+            }, 1500);
+        }).catch((err) => {
+            console.error("[BG] 브라우저 재생 거부(Policy Error):", err);
             bgMusicStreamUrl = null;
-            bgMusicVideoId = null;
-            try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
-          }
-        }, 1500);
-      }).catch((err) => {
-        bgMusicStreamUrl = null;
-        bgMusicVideoId = null;
-        try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
-      });
+            if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+            setPlayState(false);
+            showToast('⚠ 재생이 거부되었습니다. (브라우저 제한)');
+        });
     }
     return true;
   } catch(e) {
