@@ -4472,8 +4472,8 @@ async function prefetchBgStream(videoId, shouldAutoPlay = false) {
       // fetch 호출 직후
       const res = await fetch(PROXY_URL + encodeURIComponent(apiUrl(videoId)));
       const text = await res.text();
-      console.log("프록시 응답 데이터:", text); // 이게 HTML이면 Worker 설정을 다시 봐야 합니다.
-      const data = JSON.parse(text);
+      //console.log("프록시 응답 데이터:", text); // 이게 HTML이면 Worker 설정을 다시 봐야 합니다.
+      //const data = JSON.parse(text);
       
       clearTimeout(t);
       
@@ -4481,7 +4481,7 @@ async function prefetchBgStream(videoId, shouldAutoPlay = false) {
       
       // ★ 변경된 부분: 프록시 응답 구조(json.contents)에 맞게 데이터 파싱
       const json = await res.json();
-      //const data = JSON.parse(json.contents); //원본
+      const data = JSON.parse(json.contents); //원본
       //const data = await res.json(); //2차 수정
       
       const streams = (data.audioStreams || data.adaptiveFormats || [])
