@@ -1571,32 +1571,35 @@ document.getElementById('np-progress-bar').addEventListener('click', function(e)
 });
 
 function togglePlayPause() {
-  if(!player||!playerReady) return;
+  if (!player || !playerReady) return;
   const isIframePlaying = player.getPlayerState() === 1;
   const audio = typeof getBgMusicAudio === 'function' ? getBgMusicAudio() : null;
   const isAudioPlaying = audio && !audio.paused;
 
-  if(isIframePlaying || isAudioPlaying) {
+  if (isIframePlaying || isAudioPlaying) {
     userPaused = true;
-    if(isIframePlaying) player.pauseVideo();
-    if(isAudioPlaying) audio.pause();
+    if (isIframePlaying) player.pauseVideo();
+    if (isAudioPlaying) audio.pause();
     setPlayState(false);
   } else {
     userPaused = false;
-    if(document.hidden && typeof prefetchBgStream === 'function') {
-      if(bgMusicStreamUrl && bgMusicVideoId === currentTrack?.videoId) {
-         startBgMusicAudio();
+    if (document.hidden && typeof prefetchBgStream === 'function') {
+      if (bgMusicStreamUrl && bgMusicVideoId === currentTrack?.videoId) {
+        startBgMusicAudio();
       } else if (currentTrack?.videoId) {
-         showToast('스트림 연결 중...');
-         prefetchBgStream(currentTrack.videoId).then(success => {
-            if(success && document.hidden && !userPaused) startBgMusicAudio();
-            else if(!success)
-
+        showToast('스트림 연결 중...');
+        prefetchBgStream(currentTrack.videoId).then(success => {
+          if (success && document.hidden && !userPaused) {
+            startBgMusicAudio();
+          } else if (!success) {
+            // 여기에 실패 시 처리할 로직을 작성하세요
+            console.error('스트림 연결 실패');
+          }
+        });
+      }
     }
-  )}
-}
   }
-};
+}
 
 // NP sidebar actions
 document.getElementById('np-like').addEventListener('click', () => { if(currentTrack) toggleLike(currentTrack); });
