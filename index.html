@@ -2638,7 +2638,7 @@ document.getElementById('btn-np-lyrics').addEventListener('click', ()=>{
 
 // 가사 API — LRCLIB → Genius → lyrics.ovh 순서
 const GENIUS_TOKEN = 'ZntsLBvvCHSDtU9KjFm38yZMs6E-VWcJZFk_q-JDKuCXSvdNBt7B6TufFDcaPtIS';
-const CORS_PROXY = 'https://yume-proxy.touchmie.workers.dev/';
+const CORS_PROXY = 'https://yume-proxy.touchmie.workers.dev/?url=';
 
 // YouTube 제목에서 실제 곡제목/아티스트 추출
 function parseTrackInfo(title, artist) {
@@ -4461,7 +4461,7 @@ async function prefetchBgStream(videoId, shouldAutoPlay = false) {
   let found = false;
 
   // 추가: CORS 우회를 위한 프록시 URL 설정
-  const PROXY_URL = 'https://yume-proxy.touchmie.workers.dev/';
+  const PROXY_URL = 'https://yume-proxy.touchmie.workers.dev/?url=';
 
   for(const apiUrl of BG_STREAM_APIS) {
     try {
