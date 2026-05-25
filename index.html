@@ -1136,36 +1136,19 @@ window.onYouTubeIframeAPIReady = function() {
         }
         else if(e.data === S.PAUSED){
           if(!userPaused) {
-            // 사용자가 직접 일시정지한 것이 아니고, 화면이 숨겨진 상태라면 백그라운드 오디오로 전환 시도
-            // (OS가 YouTube IFrame을 강제 정지시켰을 가능성)
-              if(document.hidden) {
-                if (bgMusicStreamUrl && bgMusicVideoId === currentTrack?.videoId) {
-                   startBgMusicAudio(player.getCurrentTime());
-                } else if (currentTrack?.videoId) {
-                   prefetchBgStream(currentTrack.videoId).then(success => {
-                      if (success && document.hidden && !userPaused) startBgMusicAudio(player.getCurrentTime());
-                      else { // API 실패 시
-                        setPlayState(false); // 명시적으로 일시정지 상태로 설정
-                        if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
-                        showToast('⚠ 스트림 연결 실패. 앱을 열어주세요.');
-                      }
-                   }).catch(() => { // prefetchBgStream 자체에서 오류 발생 시
-                     setPlayState(false);
-                     if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
-                     showToast('⚠ 스트림 추출 실패 (앱을 열어주세요)');
-                   });
-                }
-              } else {
+            setTimeout(() => {
+              if(userPaused || !player || !playerReady) return;
+              if(!document.hidden) {
                 setPlayState(false); stopProgress();
                 if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
               }
+            }, 500);
           } else {
             setPlayState(false);
             stopProgress();
             if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
           }
         }
-
         else if(e.data === S.ENDED){ handleEnded(); }
       }
     }
@@ -1454,27 +1437,19 @@ function playTrack(track) {
   updateMediaSession(track);
   if(typeof resetAB === 'function') resetAB();
   if(typeof onTrackChanged === 'function') onTrackChanged(track);
-  userPaused = false; // 새 곡 재생 시 userPaused 초기화
 
   if(playerReady && player) {
-    if (document.hidden && typeof prefetchBgStream === 'function') {
-      // 백그라운드 상태에서 다음 곡으로 넘어갈 때는 유튜브 재생을 건너뛰고 오디오 스트림 추출
-      setPlayState(true); // 일단 재생 상태로 설정 (스트림 성공 시 유지, 실패 시 변경)
-      prefetchBgStream(track.videoId).then(success => {
-        if(success && document.hidden && !userPaused) startBgMusicAudio();
-        else if(!success) { setPlayState(false); showToast('⚠ 스트림 연결 실패. 앱을 열어주세요.'); }
-      }).catch(() => { // prefetchBgStream 자체에서 오류 발생 시
-        setPlayState(false); showToast('⚠ 스트림 추출 실패 (앱을 열어주세요)');
-      });
-    } else {
-      player.loadVideoById(track.videoId);
-      player.playVideo();
-      if(typeof prefetchBgStream === 'function') prefetchBgStream(track.videoId).catch(()=>{}); // 포그라운드에서도 백그라운드 전환 대비 미리 페치
-    }
+    player.loadVideoById(track.videoId);
+    player.playVideo();
+
+    // 추가: 재생 시작 시 미디어 상태 명시
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'playing';
+
   } else {
     pendingVideoId = track.videoId;
-
   }
+}
 }
 
 function playQueue(tracks, startIndex=0) {
