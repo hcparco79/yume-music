@@ -4466,17 +4466,24 @@ async function prefetchBgStream(videoId, shouldAutoPlay = false) {
   for(const apiUrl of BG_STREAM_APIS) {
     try {
       const ctrl = new AbortController();
+
       const t = setTimeout(() => ctrl.abort(), 6000);
       
       // ★ 변경된 부분: 프록시 URL을 붙여서 요청
       const res = await fetch(PROXY_URL + encodeURIComponent(apiUrl(videoId)), { signal: ctrl.signal });
+      
+      const text = await res.text(); // json() 대신 text()로 먼저 받아보세요
+      console.log("프록시 응답 결과:", text); // 여기서 HTML이 나오는지 JSON이 나오는지 확인
+      const data = JSON.parse(text); // 여기서 파싱 시도
+      
       clearTimeout(t);
       
       if(!res.ok) continue;
       
       // ★ 변경된 부분: 프록시 응답 구조(json.contents)에 맞게 데이터 파싱
       const json = await res.json();
-      const data = JSON.parse(json.contents);
+      //const data = JSON.parse(json.contents); //원본
+      //const data = await res.json(); //2차 수정
       
       const streams = (data.audioStreams || data.adaptiveFormats || [])
         .filter(s => s.url && (s.mimeType || s.type || '').includes('audio'))
