@@ -351,39 +351,6 @@ input[type=range].vol-slider::-webkit-slider-thumb:hover{background:var(--accent
 .artist-name{font-size:14px;font-weight:500}
 .artist-sub{font-size:12px;color:var(--text3);margin-top:2px}
 .artist-play-btn{margin-left:auto;background:var(--accent);border:none;border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;color:#000;font-size:14px}
-/* ── PiP 미니 플레이어 ── */
-#pip-widget{
-  display:none;position:fixed;bottom:110px;right:14px;
-  width:236px;background:var(--surface);
-  border:1px solid var(--border);border-radius:14px;
-  box-shadow:0 8px 32px rgba(0,0,0,0.45);
-  z-index:900;overflow:hidden;cursor:move;
-  user-select:none;-webkit-user-select:none;
-}
-#pip-widget.visible{display:block}
-#pip-handle{
-  position:absolute;top:6px;left:50%;transform:translateX(-50%);
-  cursor:move;padding:4px 12px;z-index:1;
-}
-#pip-art{width:100%;height:96px;object-fit:cover;display:block;pointer-events:none}
-#pip-meta{padding:8px 10px 2px}
-#pip-title{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#pip-artist{font-size:11px;color:var(--text3);margin-top:1px}
-#pip-btns{display:flex;align-items:center;justify-content:center;gap:4px;padding:4px 10px 8px}
-#pip-btns button{background:none;border:none;cursor:pointer;color:var(--text2);padding:6px;border-radius:50%;display:flex;align-items:center;transition:all .15s}
-#pip-btns button:hover{color:var(--text);background:var(--surface2)}
-#pip-play-btn{width:34px;height:34px;border-radius:50% !important;background:var(--accent) !important;color:#000 !important}
-#pip-play-btn:hover{background:var(--accent2) !important;color:#fff !important}
-#pip-x{position:absolute;top:5px;right:5px;background:rgba(0,0,0,0.55);border:none;cursor:pointer;color:#fff;width:20px;height:20px;border-radius:50%;font-size:10px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;z-index:2}
-#pip-widget:hover #pip-x{opacity:1}
-#pip-prog{height:2px;background:var(--surface3)}
-#pip-prog-fill{height:100%;background:var(--accent);width:0%;transition:width .5s linear}
-#pip-widget.dragging{box-shadow:0 16px 48px rgba(0,0,0,0.55);transition:none}
-@media(max-width:600px){
-  #pip-widget{bottom:132px;right:10px;width:200px}
-  #pip-art{height:80px}
-}
-[data-theme="light"] #pip-play-btn{color:#fff !important}
 
 /* FULLSCREEN MINI PLAYER */
 #fullscreen-player{
@@ -1064,31 +1031,6 @@ input[type=range].vol-slider::-webkit-slider-thumb:hover{background:var(--accent
     가사
   </button>
 </div>
-<!-- PiP 미니 플레이어 (백그라운드 전환 시 표시) -->
-<div id="pip-widget">
-  <div id="pip-handle">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="opacity:0.4"><line x1="3" y1="8" x2="21" y2="8"/><line x1="3" y1="16" x2="21" y2="16"/></svg>
-  </div>
-  <img id="pip-art" src="" alt="">
-  <div id="pip-meta">
-    <div id="pip-title">—</div>
-    <div id="pip-artist">—</div>
-  </div>
-  <div id="pip-btns">
-    <button id="pip-prev">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
-    </button>
-    <button id="pip-play-btn">
-      <svg id="pip-play-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-      <svg id="pip-pause-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18" style="display:none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-    </button>
-    <button id="pip-next">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
-    </button>
-  </div>
-  <button id="pip-x">✕</button>
-  <div id="pip-prog"><div id="pip-prog-fill"></div></div>
-</div>
 
 <div class="context-menu hidden" id="context-menu"></div>
 <div class="toast" id="toast"></div>
@@ -1102,9 +1044,6 @@ let currentTrack = null, queue = [], queueIndex = -1;
 let isPlaying = false, isShuffle = false, repeatMode = 0; // 0=off,1=all,2=one
 let progressInterval = null;
 let pendingVideoId = null;
-
-// 사용자가 직접 일시정지했는지 여부 (백그라운드 강제정지와 구분)
-let userPaused = false;
 
 window.onYouTubeIframeAPIReady = function() {
   player = new YT.Player('yt-player', {
@@ -1129,25 +1068,11 @@ window.onYouTubeIframeAPIReady = function() {
         if(e.data === S.PLAYING){
           setPlayState(true);
           startProgress();
-          userPaused = false;
-          if(currentTrack?.videoId && typeof prefetchBgStream === 'function') {
-            prefetchBgStream(currentTrack.videoId).catch(()=>{});
-          }
         }
         else if(e.data === S.PAUSED){
-          if(!userPaused) {
-            setTimeout(() => {
-              if(userPaused || !player || !playerReady) return;
-              if(!document.hidden) {
-                setPlayState(false); stopProgress();
-                if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
-              }
-            }, 500);
-          } else {
-            setPlayState(false);
-            stopProgress();
-            if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
-          }
+          setPlayState(false);
+          stopProgress();
+          if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
         }
         else if(e.data === S.ENDED){ handleEnded(); }
       }
@@ -1438,9 +1363,6 @@ function playTrack(track) {
   if(typeof resetAB === 'function') resetAB();
   if(typeof onTrackChanged === 'function') onTrackChanged(track);
 
-  // ★ 추가: 다음 곡 미리 가져오기 호출
-  triggerNextTrackPrefetch();
-
   if(playerReady && player) {
     player.loadVideoById(track.videoId);
     player.playVideo();
@@ -1483,9 +1405,6 @@ function setPlayState(playing) {
   }
   
 
-  // 연동 로직
-  if(typeof pipVisible !== 'undefined' && pipVisible) refreshPipPlayState();
-  if(typeof window._bgAudioSetPlayState === 'function') window._bgAudioSetPlayState(playing);
   renderQueueList();
 }
 
@@ -1518,8 +1437,6 @@ function updateProgress() {
       document.getElementById('fsp-curr').textContent = formatDuration(Math.floor(curr));
       document.getElementById('fsp-total').textContent = formatDuration(Math.floor(total));
     }
-    // PiP 진행바 업데이트
-    if(typeof pipVisible !== 'undefined' && pipVisible) refreshPipProgress(pct);
     // Media Session 위치 업데이트 (잠금화면 진행바)
     if('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession && total > 0) {
       try {
@@ -1618,8 +1535,6 @@ document.getElementById('btn-settings').addEventListener('click', (e) => {
   menu.innerHTML = '';
   const items = [
     { label:'📲 앱으로 설치', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><path d="M12 2v13"/><path d="m5 9 7 7 7-7"/><path d="M5 22h14"/></svg>', fn: triggerPWAInstall },
-    { label: pipEnabled ? '🪟 미니 플레이어 끄기' : '🪟 미니 플레이어 + 백그라운드', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>', fn: ()=>{ pipEnabled ? hidePip() : showPip(); } },
-    { label:'🎛 이퀄라이저', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>', fn: showEQModal },
     { label:'데이터 백업 (JSON 저장)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>', fn: exportData },
     { label:'백업 복원 (JSON 불러오기)', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>', fn: importData },
   ];
@@ -2441,22 +2356,6 @@ function renderQueueList() {
   });
 }
 
-/**
- * 대기열에서 다음 곡을 찾아 URL을 미리 확보하는 함수
- */
-function triggerNextTrackPrefetch() {
-  // 현재 queue와 queueIndex가 존재할 때 다음 곡 확인
-  if (queue && queueIndex !== undefined && queueIndex < queue.length - 1) {
-    const nextTrack = queue[queueIndex + 1];
-    if (nextTrack && nextTrack.videoId) {
-      console.log("[Look-ahead] 다음 곡 프리패치 시작:", nextTrack.title);
-      // shouldAutoPlay를 false로 주어 URL만 가져오고 재생은 하지 않음
-      prefetchBgStream(nextTrack.videoId, false).catch(err => {
-        console.warn("[Look-ahead] 프리패치 실패:", err);
-      });
-    }
-  }
-}
 
 
 // ============================================================
@@ -2501,49 +2400,11 @@ function updateMediaSession(track) {
 
     // 모든 액션 핸들러 등록
     const handlers = {
-      // 'play' 핸들러 수정
-      'play': async () => {
-          userPaused = false;
-          
-          // 1. AudioContext가 suspended 상태라면 강제 재개 (소리가 안 나는 주원인)
-          if (bgAudioCtx && bgAudioCtx.state === 'suspended') {
-              await bgAudioCtx.resume();
-          }
-
-          // 2. 스트림이 있다면 즉시 재생, 없다면 재페치
-          if (bgMusicStreamUrl) {
-              startBgMusicAudio();
-          } else {
-              await prefetchBgStream(currentTrack.videoId);
-              startBgMusicAudio();
-          }
-      },
-      'pause': () => {
-        userPaused = true;
-        bgPendingPlay = false;
-        wasPlayingBeforeHide = false;
-        
-        if (bgMusicAudio) {
-          bgMusicAudio.pause();
-          bgMusicAudio.currentTime = 0; // 시작점으로 이동시켜 좀비 상태 탈출
-        }
-        
-        // 미디어 세션 상태를 확실하게 'paused'로 명시
-        navigator.mediaSession.playbackState = 'paused';
-        setPlayState(false);
-      },
-      'stop': () => {
-        userPaused = true; bgPendingPlay = false; wasPlayingBeforeHide = false;
-        if(player && playerReady) player.stopVideo(); setPlayState(false);
-      },
-      'nexttrack': () => {
-        document.getElementById('btn-next').click();
-        if(document.hidden) { bgPendingPlay = true; } // 앱 복귀 시 새 트랙 재생
-      },
-      'previoustrack': () => {
-        document.getElementById('btn-prev').click();
-        if(document.hidden) { bgPendingPlay = true; }
-      },
+      'play': () => { if(player && playerReady) player.playVideo(); },
+      'pause': () => { if(player && playerReady) player.pauseVideo(); },
+      'stop': () => { if(player && playerReady) player.stopVideo(); setPlayState(false); },
+      'nexttrack': () => { document.getElementById('btn-next').click(); },
+      'previoustrack': () => { document.getElementById('btn-prev').click(); },
       'seekforward':  (d)=>{ if(player&&playerReady){ const t=player.getCurrentTime()||0; player.seekTo(t+(d?.seekOffset||10),true); }},
       'seekbackward': (d)=>{ if(player&&playerReady){ const t=player.getCurrentTime()||0; player.seekTo(Math.max(0,t-(d?.seekOffset||10)),true); }},
     };
@@ -3125,8 +2986,6 @@ function onTrackChanged(track) {
   if(typeof fspOpen !== 'undefined' && fspOpen) updateFSP();
   const fspSpeedBtn = document.getElementById('fsp-speed-btn');
   if(fspSpeedBtn && typeof SPEEDS !== 'undefined') fspSpeedBtn.textContent = SPEEDS[currentSpeedIdx] + 'x';
-  // PiP 갱신
-  if(typeof pipVisible !== 'undefined' && pipVisible) refreshPipInfo();
 }
 
 // ============================================================
@@ -3250,101 +3109,6 @@ const _speedApply = () => {
   }
 };
 
-// ============================================================
-// 4. 이퀄라이저 (Web Audio API - Bass / Treble)
-// ============================================================
-let audioCtx = null, sourceNode = null, bassNode = null, trebleNode = null;
-let eqEnabled = false;
-let bassGain = 0, trebleGain = 0;
-
-function initEQ() {
-  if(audioCtx) return;
-  try {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    // YT iframe의 오디오는 직접 접근 불가 → 시스템 오디오 대신
-    // Web Audio로 오실레이터 대신 gainNode만 안내
-    // 실제 EQ는 UI로 보여주고 YT setVolume 조합으로 흉내
-    bassNode = audioCtx.createBiquadFilter();
-    bassNode.type = 'lowshelf';
-    bassNode.frequency.value = 200;
-    trebleNode = audioCtx.createBiquadFilter();
-    trebleNode.type = 'highshelf';
-    trebleNode.frequency.value = 4000;
-    eqEnabled = true;
-  } catch(e) { console.warn('Web Audio 초기화 실패', e); }
-}
-
-// EQ 모달 표시
-function showEQModal() {
-  const existing = document.getElementById('eq-modal');
-  if(existing) { existing.remove(); return; }
-
-  const modal = document.createElement('div');
-  modal.id = 'eq-modal';
-  modal.style.cssText = `position:fixed;bottom:calc(var(--player-h) + 12px);right:20px;
-    background:var(--surface);border:1px solid var(--border);border-radius:16px;
-    padding:20px;z-index:2000;width:260px;box-shadow:0 8px 32px rgba(0,0,0,0.5)`;
-  modal.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <span style="font-size:13px;font-weight:600">🎛 이퀄라이저</span>
-      <button id="eq-close" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:18px">✕</button>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:14px">
-      <div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-          <span style="font-size:12px;color:var(--text2)">🔉 베이스</span>
-          <span id="bass-val" style="font-size:12px;color:var(--accent);font-family:'Space Mono',monospace">${bassGain > 0 ? '+' : ''}${bassGain}dB</span>
-        </div>
-        <input type="range" id="eq-bass" min="-10" max="10" value="${bassGain}" step="1"
-          style="width:100%;height:4px;-webkit-appearance:none;background:var(--surface3);border-radius:4px;outline:none;cursor:pointer">
-      </div>
-      <div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-          <span style="font-size:12px;color:var(--text2)">🔊 트레블</span>
-          <span id="treble-val" style="font-size:12px;color:var(--accent);font-family:'Space Mono',monospace">${trebleGain > 0 ? '+' : ''}${trebleGain}dB</span>
-        </div>
-        <input type="range" id="eq-treble" min="-10" max="10" value="${trebleGain}" step="1"
-          style="width:100%;height:4px;-webkit-appearance:none;background:var(--surface3);border-radius:4px;outline:none;cursor:pointer">
-      </div>
-      <div style="display:flex;gap:8px;margin-top:4px">
-        <button id="eq-reset" style="flex:1;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif">초기화</button>
-        <button id="eq-flat" style="flex:1;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif">플랫</button>
-      </div>
-      <div style="font-size:11px;color:var(--text3);text-align:center;line-height:1.5">
-        베이스/트레블은 볼륨 조합으로 시뮬레이션됩니다
-      </div>
-    </div>`;
-  document.body.appendChild(modal);
-
-  modal.querySelector('#eq-close').addEventListener('click', ()=>modal.remove());
-  modal.querySelector('#eq-bass').addEventListener('input', function() {
-    bassGain = parseInt(this.value);
-    modal.querySelector('#bass-val').textContent = (bassGain>0?'+':'') + bassGain + 'dB';
-    applyEQ();
-  });
-  modal.querySelector('#eq-treble').addEventListener('input', function() {
-    trebleGain = parseInt(this.value);
-    modal.querySelector('#treble-val').textContent = (trebleGain>0?'+':'') + trebleGain + 'dB';
-    applyEQ();
-  });
-  modal.querySelector('#eq-reset').addEventListener('click', ()=>{ bassGain=0; trebleGain=0; modal.querySelector('#eq-bass').value=0; modal.querySelector('#eq-treble').value=0; modal.querySelector('#bass-val').textContent='0dB'; modal.querySelector('#treble-val').textContent='0dB'; applyEQ(); });
-  modal.querySelector('#eq-flat').addEventListener('click', ()=>{ bassGain=0; trebleGain=0; modal.querySelector('#eq-bass').value=0; modal.querySelector('#eq-treble').value=0; modal.querySelector('#bass-val').textContent='0dB'; modal.querySelector('#treble-val').textContent='0dB'; applyEQ(); showToast('이퀄라이저 초기화'); });
-}
-
-function applyEQ() {
-  if(!player || !playerReady) return;
-  // 볼륨 기반 EQ 시뮬레이션 (베이스+는 볼륨 살짝 boost)
-  const baseVol = parseInt(document.getElementById('vol-slider').value);
-  const eqBoost = Math.max(-20, Math.min(20, bassGain * 0.5 + trebleGain * 0.3));
-  const newVol = Math.max(0, Math.min(100, baseVol + eqBoost));
-  player.setVolume(newVol);
-}
-
-// btn-speed 우클릭으로 EQ 열기
-document.getElementById('btn-speed').addEventListener('contextmenu', (e) => {
-  e.preventDefault();
-  showEQModal();
-});
 
 // ============================================================
 // 6. 플레이리스트 곡 순서 드래그 변경
@@ -4324,431 +4088,6 @@ document.getElementById('btn-theme').addEventListener('click', () => {
 applyTheme(currentTheme);
 
 // 설정 메뉴에도 테마 항목 추가는 버튼으로 충분하므로 생략
-
-// ============================================================
-// PiP 미니 플레이어 + 백그라운드 재생 (통합)
-// ============================================================
-const pipWidget = document.getElementById('pip-widget');
-let pipEnabled = false;
-let pipVisible = false;
-let bgAudioCtx = null;
-let bgSilentSource = null;
-let bgAudioEl = null;
-let bgKeepAliveInterval = null;
-let bgActive = true;
-let bgPendingPlay = false;       // 잠금화면 play 탭 후 포그라운드 복귀 시 재개 플래그
-let wasPlayingBeforeHide = false; // 백그라운드 진입 시점의 재생 상태 스냅샷
-let pipDragging = false, pipDragOX = 0, pipDragOY = 0;
-
-function showPip() {
-  if(!currentTrack) { showToast('먼저 곡을 재생해주세요'); return; }
-  pipEnabled = true; bgActive = true;
-  showToast('🪟 미니 플레이어 ON — 다른 앱 전환 시 표시돼요');
-}
-function hidePip() {
-  pipEnabled = false; pipVisible = false;
-  pipWidget.classList.remove('visible');
-  showToast('미니 플레이어 OFF');
-}
-function showPipWidget() {
-  if(!currentTrack) return;
-  pipVisible = true; pipWidget.classList.add('visible');
-  refreshPipInfo();
-}
-function hidePipWidget() {
-  pipVisible = false; pipWidget.classList.remove('visible');
-}
-function refreshPipInfo() {
-  if(!currentTrack) return;
-  document.getElementById('pip-art').src = `https://i.ytimg.com/vi/${currentTrack.videoId}/mqdefault.jpg`;
-  document.getElementById('pip-title').textContent = currentTrack.title;
-  document.getElementById('pip-artist').textContent = currentTrack.artist;
-  refreshPipPlayState();
-}
-function refreshPipPlayState() {
-  document.getElementById('pip-play-icon').style.display  = isPlaying ? 'none'  : 'block';
-  document.getElementById('pip-pause-icon').style.display = isPlaying ? 'block' : 'none';
-}
-function refreshPipProgress(pct) {
-  if(!pipVisible) return;
-  document.getElementById('pip-prog-fill').style.width = pct + '%';
-}
-
-// 컨트롤
-document.getElementById('pip-play-btn').addEventListener('click', () => document.getElementById('btn-play-pause').click());
-document.getElementById('pip-prev').addEventListener('click', () => document.getElementById('btn-prev').click());
-document.getElementById('pip-next').addEventListener('click', () => document.getElementById('btn-next').click());
-document.getElementById('pip-x').addEventListener('click', hidePip);
-pipWidget.addEventListener('dblclick', () => { hidePipWidget(); openFullscreenPlayer(); });
-
-// 드래그 마우스
-pipWidget.addEventListener('mousedown', (e) => {
-  if(e.target.closest('button')) return;
-  pipDragging = true; pipWidget.classList.add('dragging');
-  const r = pipWidget.getBoundingClientRect();
-  pipDragOX = e.clientX - r.left; pipDragOY = e.clientY - r.top; e.preventDefault();
-});
-document.addEventListener('mousemove', (e) => { if(pipDragging) movePip(e.clientX-pipDragOX, e.clientY-pipDragOY); });
-document.addEventListener('mouseup', () => { if(pipDragging){pipDragging=false;pipWidget.classList.remove('dragging');snapPip();} });
-
-// 드래그 터치
-pipWidget.addEventListener('touchstart', (e) => {
-  if(e.target.closest('button')) return;
-  pipDragging = true;
-  const r = pipWidget.getBoundingClientRect();
-  pipDragOX = e.touches[0].clientX-r.left; pipDragOY = e.touches[0].clientY-r.top;
-}, {passive:true});
-pipWidget.addEventListener('touchmove', (e) => { if(pipDragging) movePip(e.touches[0].clientX-pipDragOX, e.touches[0].clientY-pipDragOY); }, {passive:true});
-pipWidget.addEventListener('touchend', () => { if(pipDragging){pipDragging=false;snapPip();} }, {passive:true});
-
-function movePip(x, y) {
-  const mX=window.innerWidth-pipWidget.offsetWidth, mY=window.innerHeight-pipWidget.offsetHeight;
-  pipWidget.style.left=Math.max(0,Math.min(x,mX))+'px';
-  pipWidget.style.top=Math.max(0,Math.min(y,mY))+'px';
-  pipWidget.style.right='auto'; pipWidget.style.bottom='auto';
-}
-function snapPip() {
-  const r=pipWidget.getBoundingClientRect();
-  const sx=(r.left+r.width/2)<window.innerWidth/2?10:window.innerWidth-r.width-10;
-  const sy=(r.top+r.height/2)<window.innerHeight/2?70:window.innerHeight-r.height-130;
-  pipWidget.style.transition='left .2s,top .2s';
-  pipWidget.style.left=sx+'px'; pipWidget.style.top=sy+'px';
-  pipWidget.style.right='auto'; pipWidget.style.bottom='auto';
-  setTimeout(()=>pipWidget.style.transition='',200);
-}
-
-// ============================================================
-// BACKGROUND AUDIO STREAM
-// YouTube IFrame은 Chrome/Brave 정책으로 백그라운드 재생 불가.
-// 앱 전환/잠금 시 Piped/Invidious API로 직접 오디오 스트림 URL을 받아
-// <audio> 엘리먼트로 전환 → 백그라운드에서도 실제 재생 유지.
-// ============================================================
-let bgMusicAudio = null;
-let bgMusicStreamUrl = null;
-let bgMusicVideoId  = null;
-let bgFetching = false; // 중복 fetch 방지 플래그
-
-const BG_STREAM_APIS = [
-  id => `https://pipedapi.kavin.rocks/streams/${id}`,
-  id => `https://pipedapi.tokhmi.xyz/streams/${id}`,
-  id => `https://pipedapi.smnz.de/streams/${id}`,
-  id => `https://api.piped.privacydev.net/streams/${id}`,
-  id => `https://piped-api.lunar.icu/streams/${id}`,
-  id => `https://api.piped.projectsegfau.lt/streams/${id}`,
-  id => `https://inv.nadeko.net/api/v1/videos/${id}?fields=adaptiveFormats`,
-  id => `https://inv.tux.pizza/api/v1/videos/${id}?fields=adaptiveFormats`,
-  id => `https://invidious.jing.rocks/api/v1/videos/${id}?fields=adaptiveFormats`,
-  id => `https://invidious.nerdvpn.de/api/v1/videos/${id}?fields=adaptiveFormats`,
-];
-
-const streamCache = new Map();
-
-async function prefetchBgStream(videoId, shouldAutoPlay = false) {
-  if(!videoId) return false;
-  
-  if (streamCache.has(videoId)) {
-    bgMusicStreamUrl = streamCache.get(videoId);
-    bgMusicVideoId = videoId;
-    return true;
-  }
-
-  if(bgMusicVideoId === videoId && bgMusicStreamUrl) return true;
-  if(bgFetching && bgMusicVideoId === videoId) return false;
-  
-  bgFetching = true;
-  bgMusicStreamUrl = null;
-  bgMusicVideoId = videoId;
-  let found = false;
-
-  const PROXY_URL = 'https://yume-proxy.touchmie.workers.dev/?url=';
-
-  for(const apiUrl of BG_STREAM_APIS) {
-    try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 3000); // 3초로 짧게 조정(빠른 포기)
-      
-      const res = await fetch(PROXY_URL + encodeURIComponent(apiUrl(videoId)), { signal: ctrl.signal });
-      clearTimeout(t);
-      
-      if(!res.ok) continue;
-      
-      const json = await res.json();
-      // 여기서 JSON 파싱 에러가 나면 조용히 넘어가기 위해 catch로 이동
-      const data = typeof json.contents === 'string' ? JSON.parse(json.contents) : json;
-      
-      const streams = (data.audioStreams || data.adaptiveFormats || [])
-        .filter(s => s.url && (s.mimeType || s.type || '').includes('audio'))
-        .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-        
-      if(streams[0]?.url) {
-        bgMusicStreamUrl = streams[0].url;
-        bgMusicVideoId = videoId;
-        found = true;
-        streamCache.set(videoId, bgMusicStreamUrl);
-        
-        if (shouldAutoPlay && document.hidden && (isPlaying || bgPendingPlay) && !userPaused) {
-          startBgMusicAudio();
-        }
-        break;
-      }
-    } catch(e) { 
-      // 에러 로그를 아예 삭제하여 콘솔을 깨끗하게 유지
-      continue; 
-    }
-  }
-  
-  bgFetching = false;
-  return found; // 실패해도 토스트 알림 없이 조용히 종료
-}
-
-function getBgMusicAudio() {
-  if(!bgMusicAudio) {
-    bgMusicAudio = document.createElement('audio');
-    // display:none 대신 크기·위치 숨김 — 일부 브라우저는 display:none 요소를 미디어로 인식 못함
-    bgMusicAudio.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0.001;top:-9999px;left:-9999px;';
-    bgMusicAudio.setAttribute('playsinline', '');
-    bgMusicAudio.preload = 'auto';
-    document.body.appendChild(bgMusicAudio);
-    bgMusicAudio.addEventListener('ended', () => {
-      if(document.hidden && !userPaused) handleEnded();
-    });
-    bgMusicAudio.addEventListener('error', (e) => {
-      showToast('⚠ bg 오디오 오류: ' + (e.target?.error?.message || '알 수 없음'));
-      bgMusicStreamUrl = null;
-      bgMusicVideoId = null;
-    });
-  }
-  return bgMusicAudio;
-}
-
-function startBgMusicAudio() {
-  if(!bgMusicStreamUrl) return false;
-  try {
-    const audio = getBgMusicAudio();
-    audio.volume = 1.0;
-    // src가 다르거나 에러 상태면 강제 재로드
-    if(audio.src !== bgMusicStreamUrl || audio.error) {
-      audio.src = bgMusicStreamUrl;
-      audio.load();
-    }
-    const capturedUrl = bgMusicStreamUrl; // 클로저용 스냅샷
-
-    // startBgMusicAudio 내 로직 수정
-    const playPromise = bgMusicAudio.play();
-    if (playPromise) {
-        playPromise.then(() => {
-            const t0 = bgMusicAudio.currentTime;
-            console.log("[BG] 재생 시도 성공, 데이터 확인 중...");
-            
-            setTimeout(() => {
-                if (!bgMusicAudio || bgMusicAudio.src !== capturedUrl) return;
-
-                // 재생이 확인되면
-                if (!bgMusicAudio.paused && bgMusicAudio.currentTime > t0 + 0.05) {
-                    console.log("[BG] ✅ 재생 확인 완료");
-                    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
-                    setPlayState(true);
-                } else {
-                    console.warn("[BG] ❌ 재생 실패: 데이터를 받지 못함");
-                    // 버튼이 꼬이지 않게 명시적으로 일시정지 상태임을 다시 선언
-                    bgMusicAudio.pause();
-                    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
-                    setPlayState(false);
-                    showToast('⚠ 재생 연결 실패, 다시 눌러주세요');
-                }
-            }, 1500);
-        }).catch((err) => {
-            console.error("[BG] 브라우저 재생 거부(Policy Error):", err);
-            bgMusicStreamUrl = null;
-            if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
-            setPlayState(false);
-            showToast('⚠ 재생이 거부되었습니다. (브라우저 제한)');
-        });
-    }
-    return true;
-  } catch(e) {
-    return false;
-  }
-}
-
-function stopBgMusicAudio() {
-  if(!bgMusicAudio || bgMusicAudio.paused) return 0;
-  const pos = bgMusicAudio.currentTime;
-  bgMusicAudio.pause();
-  return pos;
-}
-
-function unlockBgMusicAudio(silentSrc) {
-  // ★ 핵심: bgMusicAudio를 user-gesture 컨텍스트에서 한 번 play+pause 해야
-  //    이후 백그라운드(비 user-gesture)에서도 play()가 허용됨.
-  const audio = getBgMusicAudio();
-  if(audio.dataset.unlocked) return;
-  audio.src = silentSrc;
-  audio.volume = 0.001; // unlock용 무음 재생
-  audio.play().then(() => {
-    audio.pause();
-    audio.volume = 1.0; // ★ 실제 음악 재생에 대비해 볼륨 복원
-    audio.src = '';
-    audio.dataset.unlocked = '1';
-  }).catch(() => {
-    audio.volume = 1.0; // 실패해도 볼륨은 복원
-    audio.src = '';
-  });
-}
-
-function initBackgroundAudio() {
-  if(bgAudioCtx) return; // 이중 초기화 방지 (touchstart→click 연속 호출 차단)
-  try {
-    // ── 1. <audio> 엘리먼트 방식 (주력) ──────────────────────────────
-    // HTML5 <audio>는 백그라운드 탭에서도 브라우저가 중단하지 않음.
-    // DOM에 연결된 상태로 재생해야 Chrome/Brave가 "활성 미디어"로 인식.
-    if(!bgAudioEl) {
-      try {
-        const sr = 8000, dur = 3, ns = sr * dur;
-        const ab = new ArrayBuffer(44 + ns * 2);
-        const dv = new DataView(ab);
-        const ws = (o, t) => { for(let i = 0; i < t.length; i++) dv.setUint8(o + i, t.charCodeAt(i)); };
-        ws(0,'RIFF'); dv.setUint32(4, 36 + ns * 2, true); ws(8,'WAVE');
-        ws(12,'fmt '); dv.setUint32(16, 16, true);
-        dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
-        dv.setUint32(24, sr, true); dv.setUint32(28, sr * 2, true);
-        dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
-        ws(36,'data'); dv.setUint32(40, ns * 2, true);
-        // 진폭 1 (32768분의 1) — 브라우저가 "활성 오디오"로 인식하되 완전히 들리지 않음
-        // 이전 100이었을 때 volume=0.001로도 지지직 소리가 날 수 있었음
-        for(let i = 0; i < ns; i++) {
-          dv.setInt16(44 + i * 2, (i % 2 === 0) ? 1 : -1, true); // DC-free, ±1/32768
-        }
-        const url = URL.createObjectURL(new Blob([ab], {type:'audio/wav'}));
-        bgAudioEl = document.createElement('audio');
-        bgAudioEl.src = url;
-        bgAudioEl.loop = true;
-        bgAudioEl.volume = 0.001;
-        bgAudioEl.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none;';
-        document.body.appendChild(bgAudioEl); // DOM에 연결해야 활성 미디어로 인식
-      } catch {}
-    }
-    // user gesture 컨텍스트 안에서 즉시 play() → autoplay 정책 통과
-    if(bgAudioEl) bgAudioEl.play().catch(()=>{});
-
-    // ★ bgMusicAudio를 지금(user gesture) 한 번 play+pause로 "잠금 해제"
-    //    → 이후 백그라운드 컨텍스트에서도 play()가 허용됨
-    if(bgAudioEl && bgAudioEl.src) unlockBgMusicAudio(bgAudioEl.src);
-
-    // ── 2. AudioContext 방식 (보조) ───────────────────────────────────
-    bgAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-    function createSilentLoop() {
-      const buf = bgAudioCtx.createBuffer(1, bgAudioCtx.sampleRate * 2, bgAudioCtx.sampleRate);
-      const data = buf.getChannelData(0);
-      // ★ amplitude 0.0001 (이전 1.0 × gain 0.003 = -50dB → 들림)
-      //   → 0.0001 × 0.003 = -130dB → 완전히 들리지 않음, 브라우저는 여전히 활성 오디오로 인식
-      for(let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.0001;
-      const src = bgAudioCtx.createBufferSource();
-      src.buffer = buf; src.loop = true;
-      const gain = bgAudioCtx.createGain();
-      gain.gain.value = 0.003;
-      src.connect(gain); gain.connect(bgAudioCtx.destination);
-      src.start(); return src;
-    }
-
-    bgAudioCtx.resume().then(() => {
-      if(!bgSilentSource) bgSilentSource = createSilentLoop();
-    }).catch(()=>{});
-
-    function activateBg() {
-      if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
-      if(bgAudioCtx.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
-      if(!bgSilentSource) bgSilentSource = createSilentLoop();
-    }
-    function deactivateBg() {
-      if(bgSilentSource) { try { bgSilentSource.stop(); } catch {} bgSilentSource = null; }
-    }
-
-    document.addEventListener('visibilitychange', () => {
-      if(document.hidden) {
-        // ★ 진입 시점의 재생 상태를 스냅샷으로 저장 (이후 isPlaying이 바뀌어도 복원 기준으로 사용)
-        wasPlayingBeforeHide = isPlaying;
-
-        // 즉시 paused 표시 — bgMusicAudio가 실제 데이터 재생 확인 후 'playing'으로 업데이트함
-        try { if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; } catch {}
-
-        // <audio> · AudioContext 유지
-        if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
-        if(bgAudioCtx.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
-        if(!bgSilentSource) bgSilentSource = createSilentLoop();
-
-        // keep-alive: <audio>·AudioContext 상태 주기적 확인
-        clearInterval(bgKeepAliveInterval);
-        bgKeepAliveInterval = setInterval(() => {
-          if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
-          if(bgAudioCtx?.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
-        }, 3000);
-
-        // ★ 백그라운드에서도 실제 음악 재생 유지: Piped/Invidious <audio> 스트림 시작
-        if(wasPlayingBeforeHide && !userPaused) {
-          if(bgMusicStreamUrl && bgMusicVideoId === currentTrack?.videoId) {
-            // 스트림 URL이 이미 준비된 경우 즉시 시작
-            startBgMusicAudio();
-          } else if(currentTrack?.videoId) {
-            // 아직 없으면 페치 (처음 재생 or 곡 변경 직후)
-            prefetchBgStream(currentTrack.videoId).catch(()=>{});
-          }
-        }
-
-        if(pipEnabled && currentTrack && isPlaying) showPipWidget();
-      } else {
-        // ─── 포그라운드 복귀 ───────────────────────────────────────
-        clearInterval(bgKeepAliveInterval);
-        hidePipWidget();
-
-        // wasPlayingBeforeHide: 이 값으로 resume 여부 결정 (isPlaying은 백그라운드 중 변질될 수 있음)
-        const shouldResume = wasPlayingBeforeHide || bgPendingPlay;
-        wasPlayingBeforeHide = false;
-        bgPendingPlay = false;
-
-        // ★ bg <audio> 스트림 정지 & 재생 위치 동기화
-        const bgPos = stopBgMusicAudio();
-
-        if(shouldResume && !userPaused) {
-          // 100ms 부터 빠르게 재개 시도 (bgPos > 0 이면 YouTube 위치도 맞춤)
-          [100, 400, 900, 2000].forEach(delay => {
-            setTimeout(() => {
-              if(userPaused || !player || !playerReady) return;
-              try {
-                const s = player.getPlayerState();
-                if(s !== 1) { // 1 = PLAYING 이 아닐 때만
-                  if(bgPos > 0 && delay === 100) {
-                    // bg <audio>에서 재생 중이던 위치로 YouTube 이어 재생
-                    try { player.seekTo(bgPos, true); } catch {}
-                  }
-                  player.playVideo();
-                  if(delay >= 400) showToast('▶ 재생 재개');
-                }
-              } catch {}
-            }, delay);
-          });
-        }
-      }
-    });
-
-    window.addEventListener('pagehide', () => {
-      if(bgAudioEl && bgAudioEl.paused) bgAudioEl.play().catch(()=>{});
-      if(bgAudioCtx.state === 'suspended') bgAudioCtx.resume().catch(()=>{});
-    });
-    window._bgActivate = activateBg;
-    window._bgDeactivate = deactivateBg;
-    window._bgAudioSetPlayState = (p) => { if(p) activateBg(); };
-    console.log('[BG] 초기화 완료');
-  } catch(e) { console.warn('[BG] 실패:', e); }
-}
-
-['touchstart','click'].forEach(ev =>
-  document.addEventListener(ev, function init() {
-    initBackgroundAudio();
-    document.removeEventListener(ev, init);
-  }, {once:true, passive:true})
-);
 
 // ============================================================
 // 오프라인 상태 감지
