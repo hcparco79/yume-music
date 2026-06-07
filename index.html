@@ -815,6 +815,9 @@ input[type=range].vol-slider::-webkit-slider-thumb:hover{background:var(--accent
         <button class="np-action" id="np-yt-link" title="YouTube에서 열기">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46A2.78 2.78 0 0 0 1.46 6.42 29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.95 1.95C5.12 20 12 20 12 20s6.88 0 8.59-.47a2.78 2.78 0 0 0 1.95-1.95A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="currentColor" stroke="none"/></svg>
         </button>
+        <button class="np-action" id="np-download" title="MP3 다운로드 (cobalt)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
       </div>
       <div class="np-progress">
         <div class="progress-bar" id="np-progress-bar">
@@ -897,6 +900,7 @@ input[type=range].vol-slider::-webkit-slider-thumb:hover{background:var(--accent
       <button class="ctrl-btn" id="btn-sleep" title="수면 타이머">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       </button>
+      <button class="ctrl-btn" id="btn-local-mp3" title="로컬 MP3 파일 열기" style="font-size:11px;font-family:'Space Mono',monospace;width:36px;color:var(--text3)">MP3</button>
     </div>
   </div>
 </div>
@@ -982,6 +986,7 @@ input[type=range].vol-slider::-webkit-slider-thumb:hover{background:var(--accent
       <button class="fsp-act-btn" id="fsp-add-pl-btn">+ 플레이리스트</button>
       <button class="fsp-act-btn" id="fsp-share-btn">🔗 공유</button>
       <button class="fsp-act-btn" id="fsp-speed-btn">1x</button>
+      <button class="fsp-act-btn" id="fsp-download-btn">⬇ MP3</button>
     </div>
   </div>
 </div>
@@ -1005,6 +1010,26 @@ input[type=range].vol-slider::-webkit-slider-thumb:hover{background:var(--accent
         <input id="share-url-input" readonly style="flex:1;height:34px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:0 10px;outline:none;font-family:'Space Mono',monospace">
         <button id="share-copy-btn" class="btn btn-primary" style="padding:0 14px;font-size:13px">복사</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- LOCAL MP3 MODAL -->
+<div class="modal-overlay hidden" id="modal-local-mp3">
+  <div class="modal" style="width:min(480px,92vw)">
+    <button class="close-modal" id="close-modal-local" aria-label="닫기">✕</button>
+    <h3>🎵 로컬 MP3 파일</h3>
+    <p style="font-size:13px;color:var(--text3);margin-bottom:14px">MP3 파일을 선택하면 재생목록에 추가되고 백그라운드 재생이 가능해요</p>
+    <div id="local-drop-zone" style="border:2px dashed var(--border);border-radius:10px;padding:28px 16px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:14px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32" style="color:var(--text3);margin:0 auto 8px;display:block"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <div style="font-size:14px;color:var(--text2);margin-bottom:4px">파일을 여기에 드래그하거나 클릭해서 선택</div>
+      <div style="font-size:12px;color:var(--text3)">MP3, M4A, FLAC, OGG, WAV 지원</div>
+      <input type="file" id="local-file-input" accept="audio/*,.mp3,.m4a,.flac,.ogg,.wav" multiple style="display:none">
+    </div>
+    <div id="local-file-list" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;margin-bottom:14px"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" id="cancel-local-mp3">취소</button>
+      <button class="btn btn-primary" id="confirm-local-mp3" disabled>재생목록에 추가</button>
     </div>
   </div>
 </div>
@@ -1475,8 +1500,8 @@ document.body.addEventListener('click', (e) => {
     switch(btn.id) {
         // --- [플레이어 제어] ---
         case 'btn-play-pause': isPlaying ? player.pauseVideo() : player.playVideo(); break;
-        case 'btn-prev': if(queueIndex > 0){ queueIndex--; playTrack(queue[queueIndex]); } else if(playerReady) player.seekTo(0,true); break;
-        case 'btn-next': if(queueIndex < queue.length-1){ queueIndex++; playTrack(queue[queueIndex]); } break;
+        case 'btn-prev': if(queueIndex > 0){ queueIndex--; playTrackSmart(queue[queueIndex]); } else if(isLocalTrack&&localAudio){ localAudio.currentTime=0; } else if(playerReady) player.seekTo(0,true); break;
+        case 'btn-next': if(queueIndex < queue.length-1){ queueIndex++; playTrackSmart(queue[queueIndex]); } break;
         case 'btn-mute': player.isMuted() ? player.unMute() : player.mute(); break;
 
         // --- [탭/메뉴 내비게이션] ---
@@ -2351,7 +2376,7 @@ function renderQueueList() {
         <div class="q-artist">${escHtml(t.artist)}</div>
       </div>
       ${t.duration?`<div class="q-duration">${t.duration}</div>`:''}`;
-    div.addEventListener('click', () => { queueIndex=i; playTrack(queue[i]); });
+    div.addEventListener('click', () => { queueIndex=i; playTrackSmart(queue[i]); });
     el.appendChild(div);
   });
 }
@@ -3195,9 +3220,13 @@ function handleEnded() {
     setPlayState(false);
     return;
   }
-  if(repeatMode===2){ player.seekTo(0); player.playVideo(); return; }
-  if(queueIndex < queue.length-1){ queueIndex++; playTrack(queue[queueIndex]); }
-  else if(repeatMode===1){ queueIndex=0; playTrack(queue[0]); }
+  if(repeatMode===2){
+    if(isLocalTrack && localAudio){ localAudio.currentTime=0; localAudio.play(); }
+    else { player.seekTo(0); player.playVideo(); }
+    return;
+  }
+  if(queueIndex < queue.length-1){ queueIndex++; playTrackSmart(queue[queueIndex]); }
+  else if(repeatMode===1){ queueIndex=0; playTrackSmart(queue[0]); }
   else { setPlayState(false); }
 }
 
@@ -3320,7 +3349,7 @@ fspContent.addEventListener('touchend', (e) => {
   // ── 왼쪽 스와이프 → 다음 곡
   } else if(absDx > absDy && dx < -60 && dt < 400) {
     if(queueIndex < queue.length - 1) {
-      queueIndex++; playTrack(queue[queueIndex]);
+      queueIndex++; playTrackSmart(queue[queueIndex]);
       showSwipeIndicator('next');
     } else {
       showSwipeIndicator('end');
@@ -3329,10 +3358,10 @@ fspContent.addEventListener('touchend', (e) => {
   // ── 오른쪽 스와이프 → 이전 곡
   } else if(absDx > absDy && dx > 60 && dt < 400) {
     if(queueIndex > 0) {
-      queueIndex--; playTrack(queue[queueIndex]);
+      queueIndex--; playTrackSmart(queue[queueIndex]);
       showSwipeIndicator('prev');
-    } else if(player && playerReady) {
-      player.seekTo(0, true);
+    } else if(isLocalTrack&&localAudio) {
+      localAudio.currentTime=0;
       showSwipeIndicator('restart');
     }
   }
@@ -4154,6 +4183,339 @@ offlineStyle.textContent = `
   @keyframes slideUp2 { from{transform:translateY(0);opacity:1} to{transform:translateY(-100%);opacity:0} }
 `;
 document.head.appendChild(offlineStyle);
+
+// ============================================================
+// LOCAL MP3 — 로컬 오디오 파일 재생 (Web Audio / HTML5)
+// ============================================================
+
+// 로컬 트랙 상태
+let localAudio = null;          // HTMLAudioElement (로컬 재생용)
+let isLocalTrack = false;       // 현재 재생이 로컬 파일인지 여부
+let localQueue = [];            // 로컬 트랙 큐
+let pendingLocalFiles = [];     // 모달에서 선택된 파일 목록
+
+// 로컬 트랙 재생 (YouTube IFrame 대신 HTMLAudioElement 사용)
+function playLocalTrack(track) {
+  // 기존 YouTube 재생 중지
+  try { if(player && playerReady) { player.stopVideo(); } } catch {}
+
+  // 기존 로컬 오디오 정리
+  if(localAudio) {
+    localAudio.pause();
+    URL.revokeObjectURL(localAudio.src);
+    localAudio = null;
+  }
+
+  isLocalTrack = true;
+  currentTrack = track;
+  addToRecent(track);
+
+  // 썸네일: 로컬 파일은 이모지 플레이스홀더
+  const thumb = track.thumbnail || '';
+  document.getElementById('player-title').textContent = track.title;
+  document.getElementById('player-artist').textContent = track.artist || '로컬 파일';
+  const img = document.getElementById('player-thumb-img');
+  if(thumb) { img.src = thumb; img.style.display='block'; }
+  else { img.style.display='none'; }
+
+  document.getElementById('np-title').textContent = track.title;
+  document.getElementById('np-artist').textContent = track.artist || '로컬 파일';
+  const npImg = document.getElementById('np-art-img');
+  if(thumb) { npImg.src = thumb; npImg.style.display='block'; document.getElementById('np-art-placeholder').style.display='none'; }
+  else { npImg.style.display='none'; document.getElementById('np-art-placeholder').style.display='flex'; }
+
+  updateLikeButtons();
+  renderQueueList();
+  updateMediaSession(track);
+
+  // HTMLAudioElement 생성
+  localAudio = new Audio();
+  localAudio.src = track.localUrl;  // Object URL
+  localAudio.volume = (parseInt(document.getElementById('vol-slider').value) || 80) / 100;
+  localAudio.playbackRate = 1;
+
+  localAudio.addEventListener('play', () => {
+    setPlayState(true);
+    startLocalProgress();
+    if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+  });
+  localAudio.addEventListener('pause', () => {
+    setPlayState(false);
+    stopProgress();
+    if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+  });
+  localAudio.addEventListener('ended', () => {
+    stopProgress();
+    handleEnded();
+  });
+  localAudio.addEventListener('error', () => {
+    showToast('파일을 재생할 수 없어요');
+    isLocalTrack = false;
+  });
+
+  localAudio.play().catch(() => showToast('재생 권한이 필요해요. 화면을 탭해주세요'));
+}
+
+// 로컬 진행바 업데이트
+function startLocalProgress() {
+  stopProgress();
+  progressInterval = setInterval(() => {
+    if(!localAudio || localAudio.paused) return;
+    const curr = localAudio.currentTime || 0;
+    const total = localAudio.duration || 0;
+    const pct = total ? (curr/total)*100 : 0;
+    document.getElementById('prog-fill').style.width = pct+'%';
+    document.getElementById('prog-curr').textContent = formatDuration(Math.floor(curr));
+    document.getElementById('prog-total').textContent = formatDuration(Math.floor(total));
+    document.getElementById('np-progress-fill').style.width = pct+'%';
+    document.getElementById('np-curr-time').textContent = formatDuration(Math.floor(curr));
+    document.getElementById('np-total-time').textContent = formatDuration(Math.floor(total));
+    document.getElementById('mobile-progress-fill').style.width = pct+'%';
+    if(fspOpen) {
+      document.getElementById('fsp-prog-fill').style.width = pct+'%';
+      document.getElementById('fsp-curr').textContent = formatDuration(Math.floor(curr));
+      document.getElementById('fsp-total').textContent = formatDuration(Math.floor(total));
+    }
+    if('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession && total > 0) {
+      try { navigator.mediaSession.setPositionState({ duration: total, playbackRate: localAudio.playbackRate, position: Math.min(curr, total) }); } catch {}
+    }
+  }, 500);
+}
+
+// 로컬 파일 → track 객체 변환
+function fileToTrack(file) {
+  const url = URL.createObjectURL(file);
+  // 파일명에서 제목/아티스트 추출 ("아티스트 - 제목.mp3" 패턴)
+  const name = file.name.replace(/\.[^.]+$/, ''); // 확장자 제거
+  const parts = name.split(' - ');
+  const title = parts.length >= 2 ? parts.slice(1).join(' - ').trim() : name;
+  const artist = parts.length >= 2 ? parts[0].trim() : '로컬 파일';
+  return {
+    videoId: 'local_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+    title,
+    artist,
+    thumbnail: '',
+    duration: '',
+    localUrl: url,
+    isLocal: true
+  };
+}
+
+// 파일 크기 포맷
+function formatFileSize(bytes) {
+  if(bytes < 1024*1024) return (bytes/1024).toFixed(0) + ' KB';
+  return (bytes/1024/1024).toFixed(1) + ' MB';
+}
+
+// 모달 파일 목록 렌더링
+function renderLocalFileList() {
+  const list = document.getElementById('local-file-list');
+  const confirmBtn = document.getElementById('confirm-local-mp3');
+  list.innerHTML = '';
+  if(!pendingLocalFiles.length) { confirmBtn.disabled = true; return; }
+  confirmBtn.disabled = false;
+  pendingLocalFiles.forEach((file, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:8px;font-size:13px';
+    row.innerHTML = `
+      <span style="font-size:18px;flex-shrink:0">🎵</span>
+      <div style="flex:1;min-width:0">
+        <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500">${escHtml(file.name.replace(/\.[^.]+$/,''))}</div>
+        <div style="font-size:11px;color:var(--text3)">${formatFileSize(file.size)}</div>
+      </div>
+      <button data-idx="${i}" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 6px;border-radius:4px;flex-shrink:0" title="제거">✕</button>`;
+    row.querySelector('button').addEventListener('click', () => {
+      pendingLocalFiles.splice(i, 1);
+      renderLocalFileList();
+    });
+    list.appendChild(row);
+  });
+}
+
+// 모달 열기
+function openLocalMp3Modal() {
+  pendingLocalFiles = [];
+  renderLocalFileList();
+  document.getElementById('modal-local-mp3').classList.remove('hidden');
+}
+
+// 파일 추가 (input 또는 드래그)
+function addLocalFiles(files) {
+  const audio = Array.from(files).filter(f => f.type.startsWith('audio/') || /\.(mp3|m4a|flac|ogg|wav|aac)$/i.test(f.name));
+  if(!audio.length) { showToast('오디오 파일만 추가할 수 있어요'); return; }
+  pendingLocalFiles = [...pendingLocalFiles, ...audio];
+  renderLocalFileList();
+}
+
+// 드롭존 이벤트
+const dropZone = document.getElementById('local-drop-zone');
+const fileInput = document.getElementById('local-file-input');
+
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => addLocalFiles(e.target.files));
+
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropZone.style.borderColor = 'var(--accent)';
+  dropZone.style.background = 'rgba(232,255,71,0.04)';
+});
+dropZone.addEventListener('dragleave', () => {
+  dropZone.style.borderColor = 'var(--border)';
+  dropZone.style.background = '';
+});
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.style.borderColor = 'var(--border)';
+  dropZone.style.background = '';
+  addLocalFiles(e.dataTransfer.files);
+});
+
+// 모달 확인 → 재생목록에 추가 후 즉시 재생
+document.getElementById('confirm-local-mp3').addEventListener('click', () => {
+  if(!pendingLocalFiles.length) return;
+  const tracks = pendingLocalFiles.map(fileToTrack);
+  // 대기열에 추가
+  if(tracks.length === 1) {
+    // 단일 파일: 즉시 재생
+    document.getElementById('modal-local-mp3').classList.add('hidden');
+    queue = [...queue, ...tracks];
+    queueIndex = queue.length - tracks.length;
+    playLocalTrack(tracks[0]);
+    showToast(`🎵 ${tracks[0].title} 재생 시작`);
+  } else {
+    // 다중 파일: 대기열에 추가, 첫 파일 재생
+    document.getElementById('modal-local-mp3').classList.add('hidden');
+    const startIdx = queue.length;
+    queue = [...queue, ...tracks];
+    queueIndex = startIdx;
+    playLocalTrack(tracks[0]);
+    showToast(`🎵 ${tracks.length}개 파일 재생목록에 추가됨`);
+  }
+  pendingLocalFiles = [];
+});
+
+document.getElementById('cancel-local-mp3').addEventListener('click', () => {
+  document.getElementById('modal-local-mp3').classList.add('hidden');
+});
+document.getElementById('close-modal-local').addEventListener('click', () => {
+  document.getElementById('modal-local-mp3').classList.add('hidden');
+});
+
+// 플레이어바 MP3 버튼
+document.getElementById('btn-local-mp3').addEventListener('click', openLocalMp3Modal);
+
+// 로컬 재생 중일 때 플레이/일시정지 버튼 처리 (기존 버튼에 훅)
+const origPlayPauseHandler = document.body.onclick;
+document.getElementById('btn-play-pause').addEventListener('click', (e) => {
+  if(!isLocalTrack || !localAudio) return;
+  e.stopImmediatePropagation();
+  localAudio.paused ? localAudio.play() : localAudio.pause();
+}, true);
+
+// 볼륨 슬라이더 → 로컬 오디오에도 적용
+document.getElementById('vol-slider').addEventListener('input', function() {
+  if(isLocalTrack && localAudio) localAudio.volume = parseInt(this.value) / 100;
+});
+
+// Seek (프로그레스바) → 로컬 오디오
+document.getElementById('prog-bar').addEventListener('click', function(e) {
+  if(!isLocalTrack || !localAudio) return;
+  const rect = this.getBoundingClientRect();
+  localAudio.currentTime = ((e.clientX-rect.left)/rect.width) * (localAudio.duration||0);
+}, true);
+document.getElementById('np-progress-bar').addEventListener('click', function(e) {
+  if(!isLocalTrack || !localAudio) return;
+  const rect = this.getBoundingClientRect();
+  localAudio.currentTime = ((e.clientX-rect.left)/rect.width) * (localAudio.duration||0);
+}, true);
+
+// 로컬 재생 시 다음/이전 처리 (handleEnded는 기존 큐 로직 재사용)
+// → queue에 localUrl이 있으면 playLocalTrack, 없으면 playTrack으로 분기
+const _origPlayTrackFromQueue = playTrack;
+function playTrackSmart(track) {
+  if(track && track.isLocal) {
+    playLocalTrack(track);
+  } else {
+    isLocalTrack = false;
+    if(localAudio) { localAudio.pause(); localAudio = null; }
+    _origPlayTrackFromQueue(track);
+  }
+}
+
+// ============================================================
+// COBALT MP3 다운로드
+// ============================================================
+
+async function downloadViaCobalt() {
+  if(!currentTrack) { showToast('재생 중인 곡이 없어요'); return; }
+  if(currentTrack.isLocal) { showToast('로컬 파일은 이미 기기에 있어요 😊'); return; }
+
+  const btn = document.getElementById('np-download');
+  const origTitle = btn.title;
+  btn.style.color = 'var(--accent2)';
+  btn.title = '다운로드 중...';
+  showToast('⬇ MP3 변환 중... (cobalt)');
+
+  const videoUrl = `https://www.youtube.com/watch?v=${currentTrack.videoId}`;
+
+  // cobalt API 엔드포인트 목록 (공개 인스턴스 폴백)
+  const COBALT_APIS = [
+    'https://api.cobalt.tools',
+    'https://cobalt.api.li',
+  ];
+
+  let downloadUrl = null;
+  let filename = null;
+
+  for(const api of COBALT_APIS) {
+    try {
+      const res = await fetch(`${api}/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          url: videoUrl,
+          downloadMode: 'audio',
+          audioFormat: 'mp3',
+          audioBitrate: '320',
+          filenameStyle: 'pretty',
+        }),
+        signal: AbortSignal.timeout(15000)
+      });
+      if(!res.ok) continue;
+      const data = await res.json();
+      if(data.status === 'tunnel' || data.status === 'redirect') {
+        downloadUrl = data.url;
+        filename = data.filename || `${currentTrack.title}.mp3`;
+        break;
+      }
+    } catch { continue; }
+  }
+
+  btn.style.color = '';
+  btn.title = origTitle;
+
+  if(!downloadUrl) {
+    showToast('❌ cobalt 서버에 연결할 수 없어요. 잠시 후 다시 시도해주세요');
+    return;
+  }
+
+  // 다운로드 트리거
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = filename;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast(`✅ 다운로드 시작: ${filename}`);
+}
+
+// NP 사이드바 다운로드 버튼
+document.getElementById('np-download').addEventListener('click', downloadViaCobalt);
+
+// FSP 다운로드 버튼
+document.getElementById('fsp-download-btn').addEventListener('click', downloadViaCobalt);
 
 // ============================================================
 // INIT
