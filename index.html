@@ -4446,65 +4446,101 @@ function playTrackSmart(track) {
 // COBALT MP3 다운로드
 // ============================================================
 
+// cobalt 인스턴스 캐시 (세션 동안 재사용)
+let cobaltInstanceCache = null;
+
+// instances.cobalt.best 에서 온라인 인스턴스 목록 동적으로 가져오기
+async function getCobaltInstances() {
+  if(cobaltInstanceCache) return cobaltInstanceCache;
+  try {
+    const res = await fetch('https://instances.cobalt.best/api/instances.json', {
+      headers: { 'User-Agent': 'yume-music/1.0 (+https://github.com/hcparco79/yume-music)' },
+      signal: AbortSignal.timeout(8000)
+    });
+    if(!res.ok) throw new Error('instance list fetch failed');
+    const list = await res.json();
+    // online=true이고 youtube=true인 인스턴스만, score 높은 순
+    const online = list
+      .filter(inst => inst.online?.api === true && inst.services?.youtube === true && inst.api && !inst.nodomain)
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .slice(0, 6)
+      .map(inst => `${inst.protocol || 'https'}://${inst.api}`);
+    if(online.length) { cobaltInstanceCache = online; return online; }
+  } catch {}
+  // 폴백: 알려진 인스턴스들
+  return [
+    'https://cobalt.api.li',
+    'https://capi.oak.li',
+    'https://co.eepy.moe',
+  ];
+}
+
+// cobalt POST 요청 (현재 API spec: POST /, body: { url, downloadMode, audioFormat, ... })
+async function cobaltPost(apiBase, videoUrl) {
+  const res = await fetch(`${apiBase}/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify({
+      url: videoUrl,
+      downloadMode: 'audio',
+      audioFormat: 'mp3',
+      audioBitrate: '320',
+      filenameStyle: 'pretty',
+    }),
+    signal: AbortSignal.timeout(12000)
+  });
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  // status: "tunnel" | "redirect" | "picker" | "error"
+  if(data.status === 'tunnel' || data.status === 'redirect') return data;
+  throw new Error(`cobalt status: ${data.status} / ${data.error?.code || ''}`);
+}
+
 async function downloadViaCobalt() {
   if(!currentTrack) { showToast('재생 중인 곡이 없어요'); return; }
   if(currentTrack.isLocal) { showToast('로컬 파일은 이미 기기에 있어요 😊'); return; }
 
   const btn = document.getElementById('np-download');
-  const origTitle = btn.title;
   btn.style.color = 'var(--accent2)';
-  btn.title = '다운로드 중...';
-  showToast('⬇ MP3 변환 중... (cobalt)');
+  btn.style.pointerEvents = 'none';
+  showToast('⬇ MP3 변환 중...');
 
   const videoUrl = `https://www.youtube.com/watch?v=${currentTrack.videoId}`;
+  let result = null;
 
-  // cobalt API 엔드포인트 목록 (공개 인스턴스 폴백)
-  const COBALT_APIS = [
-    'https://api.cobalt.tools',
-    'https://cobalt.api.li',
-  ];
-
-  let downloadUrl = null;
-  let filename = null;
-
-  for(const api of COBALT_APIS) {
-    try {
-      const res = await fetch(`${api}/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({
-          url: videoUrl,
-          downloadMode: 'audio',
-          audioFormat: 'mp3',
-          audioBitrate: '320',
-          filenameStyle: 'pretty',
-        }),
-        signal: AbortSignal.timeout(15000)
-      });
-      if(!res.ok) continue;
-      const data = await res.json();
-      if(data.status === 'tunnel' || data.status === 'redirect') {
-        downloadUrl = data.url;
-        filename = data.filename || `${currentTrack.title}.mp3`;
-        break;
+  try {
+    const instances = await getCobaltInstances();
+    for(const api of instances) {
+      try {
+        result = await cobaltPost(api, videoUrl);
+        if(result) break;
+      } catch(err) {
+        console.warn(`[cobalt] ${api} 실패:`, err.message);
+        continue;
       }
-    } catch { continue; }
+    }
+  } catch(err) {
+    console.error('[cobalt] 인스턴스 목록 로드 실패:', err);
   }
 
   btn.style.color = '';
-  btn.title = origTitle;
+  btn.style.pointerEvents = '';
 
-  if(!downloadUrl) {
-    showToast('❌ cobalt 서버에 연결할 수 없어요. 잠시 후 다시 시도해주세요');
+  if(!result?.url) {
+    cobaltInstanceCache = null; // 다음 시도 시 재시도 위해 캐시 초기화
+    showToast('❌ 다운로드 실패 — 모든 cobalt 서버가 응답하지 않아요');
     return;
   }
 
-  // 다운로드 트리거
+  const filename = result.filename || `${currentTrack.title}.mp3`;
   const a = document.createElement('a');
-  a.href = downloadUrl;
+  a.href = result.url;
   a.download = filename;
   a.target = '_blank';
-  a.rel = 'noopener';
+  a.rel = 'noopener noreferrer';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
