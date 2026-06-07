@@ -987,6 +987,7 @@ input[type=range].vol-slider::-webkit-slider-thumb:hover{background:var(--accent
       <button class="fsp-act-btn" id="fsp-share-btn">🔗 공유</button>
       <button class="fsp-act-btn" id="fsp-speed-btn">1x</button>
       <button class="fsp-act-btn" id="fsp-download-btn">⬇ MP3</button>
+      <button class="fsp-act-btn" id="fsp-local-btn">📂 내 파일</button>
     </div>
   </div>
 </div>
@@ -4468,6 +4469,7 @@ document.getElementById('np-download').addEventListener('click', openDownloadMen
 
 // FSP 다운로드 버튼
 document.getElementById('fsp-download-btn').addEventListener('click', openDownloadMenu);
+document.getElementById('fsp-local-btn').addEventListener('click', () => { closeFullscreenPlayer(); openLocalMp3Modal(); });
 
 // ============================================================
 // INIT
