@@ -4449,12 +4449,17 @@ function playTrackSmart(track) {
 // 브라우저 환경에서는 YouTube 오디오를 직접 fetch할 수 없음 (CORS).
 // 대신 현재 곡 URL을 채운 채로 외부 다운로드 사이트를 새 탭으로 열어줌.
 
-function openDownloadMenu() {
+async function openDownloadMenu() {
   if(!currentTrack) { showToast('재생 중인 곡이 없어요'); return; }
   if(currentTrack.isLocal) { showToast('로컬 파일은 이미 기기에 있어요 😊'); return; }
-  const videoUrl = encodeURIComponent(`https://www.youtube.com/watch?v=${currentTrack.videoId}`);
-  window.open(`https://cnvmp3.com/v18?url=${videoUrl}`, '_blank', 'noopener');
-  showToast('⬇ cnvmp3.com에서 MP3 변환 중...');
+  const rawUrl = `https://www.youtube.com/watch?v=${currentTrack.videoId}`;
+  try {
+    await navigator.clipboard.writeText(rawUrl);
+    showToast('📋 URL 복사됨 — cnvmp3.com에 붙여넣기 하세요 (Ctrl+V)');
+  } catch {
+    showToast('cnvmp3.com을 열어서 이 URL을 붙여넣으세요: ' + rawUrl);
+  }
+  window.open('https://cnvmp3.com', '_blank', 'noopener');
 }
 
 
