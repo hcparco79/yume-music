@@ -4199,26 +4199,34 @@ let pendingLocalFiles = [];     // 모달에서 선택된 파일 목록
 function playLocalTrack(track) {
   // 기존 YouTube 재생 중지
   try { if(player && playerReady) { player.stopVideo(); } } catch {}
-
   // 기존 로컬 오디오 정리
-  if(localAudio) {
-    localAudio.pause();
-    URL.revokeObjectURL(localAudio.src);
-    localAudio = null;
-  }
+  if(localAudio) { localAudio.pause(); URL.revokeObjectURL(localAudio.src); localAudio = null; }
 
+  const audio = new Audio();
+  audio.src = track.localUrl;
+  audio.volume = (parseInt(document.getElementById('vol-slider').value) || 80) / 100;
+  const p = audio.play();
+  playLocalTrackWithAudio(track, audio, p);
+}
+
+// 이미 play()가 호출된 Audio 객체로 UI 연결 (모바일 제스처 컨텍스트 유지용)
+function playLocalTrackWithAudio(track, audio, playPromise) {
+  // 기존 YouTube 재생 중지
+  try { if(player && playerReady) { player.stopVideo(); } } catch {}
+  // 기존 로컬 오디오 정리 (새 audio와 다를 때만)
+  if(localAudio && localAudio !== audio) { localAudio.pause(); URL.revokeObjectURL(localAudio.src); }
+
+  localAudio = audio;
   isLocalTrack = true;
   currentTrack = track;
   addToRecent(track);
 
-  // 썸네일: 로컬 파일은 이모지 플레이스홀더
+  // UI 업데이트
   const thumb = track.thumbnail || '';
   document.getElementById('player-title').textContent = track.title;
   document.getElementById('player-artist').textContent = track.artist || '로컬 파일';
   const img = document.getElementById('player-thumb-img');
-  if(thumb) { img.src = thumb; img.style.display='block'; }
-  else { img.style.display='none'; }
-
+  if(thumb) { img.src = thumb; img.style.display='block'; } else { img.style.display='none'; }
   document.getElementById('np-title').textContent = track.title;
   document.getElementById('np-artist').textContent = track.artist || '로컬 파일';
   const npImg = document.getElementById('np-art-img');
@@ -4229,32 +4237,32 @@ function playLocalTrack(track) {
   renderQueueList();
   updateMediaSession(track);
 
-  // HTMLAudioElement 생성
-  localAudio = new Audio();
-  localAudio.src = track.localUrl;  // Object URL
-  localAudio.volume = (parseInt(document.getElementById('vol-slider').value) || 80) / 100;
-  localAudio.playbackRate = 1;
+  audio.volume = (parseInt(document.getElementById('vol-slider').value) || 80) / 100;
+  audio.playbackRate = 1;
 
-  localAudio.addEventListener('play', () => {
+  audio.addEventListener('play', () => {
     setPlayState(true);
     startLocalProgress();
     if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
   });
-  localAudio.addEventListener('pause', () => {
+  audio.addEventListener('pause', () => {
     setPlayState(false);
     stopProgress();
     if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
   });
-  localAudio.addEventListener('ended', () => {
-    stopProgress();
-    handleEnded();
-  });
-  localAudio.addEventListener('error', () => {
-    showToast('파일을 재생할 수 없어요');
-    isLocalTrack = false;
-  });
+  audio.addEventListener('ended', () => { stopProgress(); handleEnded(); });
+  audio.addEventListener('error', () => { showToast('파일을 재생할 수 없어요'); isLocalTrack = false; });
 
-  localAudio.play().catch(() => showToast('재생 권한이 필요해요. 화면을 탭해주세요'));
+  // play() 결과 처리 (이미 호출된 promise)
+  if(playPromise) {
+    playPromise
+      .then(() => { setPlayState(true); startLocalProgress(); })
+      .catch(() => {
+        // 자동재생 실패 시 일시정지 상태로 대기 — 탭하면 재생됨
+        setPlayState(false);
+        showToast('▶ 재생 버튼을 눌러주세요');
+      });
+  }
 }
 
 // 로컬 진행바 업데이트
@@ -4375,23 +4383,25 @@ dropZone.addEventListener('drop', (e) => {
 document.getElementById('confirm-local-mp3').addEventListener('click', () => {
   if(!pendingLocalFiles.length) return;
   const tracks = pendingLocalFiles.map(fileToTrack);
-  // 대기열에 추가
-  if(tracks.length === 1) {
-    // 단일 파일: 즉시 재생
-    document.getElementById('modal-local-mp3').classList.add('hidden');
-    queue = [...queue, ...tracks];
-    queueIndex = queue.length - tracks.length;
-    playLocalTrack(tracks[0]);
-    showToast(`🎵 ${tracks[0].title} 재생 시작`);
-  } else {
-    // 다중 파일: 대기열에 추가, 첫 파일 재생
-    document.getElementById('modal-local-mp3').classList.add('hidden');
-    const startIdx = queue.length;
-    queue = [...queue, ...tracks];
-    queueIndex = startIdx;
-    playLocalTrack(tracks[0]);
-    showToast(`🎵 ${tracks.length}개 파일 재생목록에 추가됨`);
-  }
+  const startIdx = queue.length;
+  queue = [...queue, ...tracks];
+  queueIndex = startIdx;
+
+  // ★ 클릭 제스처 컨텍스트 안에서 바로 play() 호출 — 모바일 autoplay 허용
+  const firstAudio = new Audio();
+  firstAudio.src = tracks[0].localUrl;
+  firstAudio.volume = (parseInt(document.getElementById('vol-slider').value) || 80) / 100;
+  const playPromise = firstAudio.play();
+
+  document.getElementById('modal-local-mp3').classList.add('hidden');
+
+  // play()가 시작된 Audio 객체를 넘겨서 UI만 연결
+  playLocalTrackWithAudio(tracks[0], firstAudio, playPromise);
+
+  const msg = tracks.length === 1
+    ? `🎵 ${tracks[0].title} 재생 시작`
+    : `🎵 ${tracks.length}개 파일 재생목록에 추가됨`;
+  showToast(msg);
   pendingLocalFiles = [];
 });
 
