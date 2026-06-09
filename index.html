@@ -4194,34 +4194,36 @@ let localAudio = null;          // HTMLAudioElement (로컬 재생용)
 let isLocalTrack = false;       // 현재 재생이 로컬 파일인지 여부
 let localQueue = [];            // 로컬 트랙 큐
 let pendingLocalFiles = [];     // 모달에서 선택된 파일 목록
+let unlockedAudio = null;       // 제스처로 unlock된 Audio 인스턴스 (재사용)
+
+// 첫 사용자 제스처 때 Audio를 unlock해두는 함수
+// — 이후 src만 바꿔서 play()하면 제스처 없이도 재생 가능
+function getUnlockedAudio() {
+  if(unlockedAudio) return unlockedAudio;
+  unlockedAudio = new Audio();
+  // 빈 1초 묵음 재생으로 unlock
+  unlockedAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+  unlockedAudio.volume = 0;
+  unlockedAudio.play().catch(()=>{});
+  return unlockedAudio;
+}
 
 // 로컬 트랙 재생 (YouTube IFrame 대신 HTMLAudioElement 사용)
 function playLocalTrack(track) {
-  // 기존 YouTube 재생 중지
   try { if(player && playerReady) { player.stopVideo(); } } catch {}
-  // 기존 로컬 오디오 정리
-  if(localAudio) { localAudio.pause(); URL.revokeObjectURL(localAudio.src); localAudio = null; }
+  if(localAudio) { localAudio.pause(); localAudio.removeAttribute('src'); localAudio.load(); }
 
-  const audio = new Audio();
+  // unlock된 Audio 인스턴스 재사용 — 새로 생성하면 제스처 컨텍스트 없어서 막힘
+  const audio = unlockedAudio || new Audio();
+  localAudio = audio;
   audio.src = track.localUrl;
   audio.volume = (parseInt(document.getElementById('vol-slider').value) || 80) / 100;
-  const p = audio.play();
-  playLocalTrackWithAudio(track, audio, p);
-}
+  audio.load();
 
-// 이미 play()가 호출된 Audio 객체로 UI 연결 (모바일 제스처 컨텍스트 유지용)
-function playLocalTrackWithAudio(track, audio, playPromise) {
-  // 기존 YouTube 재생 중지
-  try { if(player && playerReady) { player.stopVideo(); } } catch {}
-  // 기존 로컬 오디오 정리 (새 audio와 다를 때만)
-  if(localAudio && localAudio !== audio) { localAudio.pause(); URL.revokeObjectURL(localAudio.src); }
-
-  localAudio = audio;
   isLocalTrack = true;
   currentTrack = track;
   addToRecent(track);
 
-  // UI 업데이트
   const thumb = track.thumbnail || '';
   document.getElementById('player-title').textContent = track.title;
   document.getElementById('player-artist').textContent = track.artist || '로컬 파일';
@@ -4230,39 +4232,23 @@ function playLocalTrackWithAudio(track, audio, playPromise) {
   document.getElementById('np-title').textContent = track.title;
   document.getElementById('np-artist').textContent = track.artist || '로컬 파일';
   const npImg = document.getElementById('np-art-img');
-  if(thumb) { npImg.src = thumb; npImg.style.display='block'; document.getElementById('np-art-placeholder').style.display='none'; }
+  if(thumb) { npImg.src=thumb; npImg.style.display='block'; document.getElementById('np-art-placeholder').style.display='none'; }
   else { npImg.style.display='none'; document.getElementById('np-art-placeholder').style.display='flex'; }
 
   updateLikeButtons();
   renderQueueList();
   updateMediaSession(track);
 
-  audio.volume = (parseInt(document.getElementById('vol-slider').value) || 80) / 100;
-  audio.playbackRate = 1;
+  // 이벤트 리스너 중복 방지 — 매번 새로 등록 대신 onXxx 사용
+  audio.onplay  = () => { setPlayState(true);  startLocalProgress(); if('mediaSession' in navigator) navigator.mediaSession.playbackState='playing'; };
+  audio.onpause = () => { setPlayState(false); stopProgress();        if('mediaSession' in navigator) navigator.mediaSession.playbackState='paused'; };
+  audio.onended = () => { stopProgress(); handleEnded(); };
+  audio.onerror = () => { showToast('파일을 재생할 수 없어요'); isLocalTrack=false; };
 
-  audio.addEventListener('play', () => {
-    setPlayState(true);
-    startLocalProgress();
-    if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
-  });
-  audio.addEventListener('pause', () => {
+  audio.play().catch(() => {
     setPlayState(false);
-    stopProgress();
-    if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+    showToast('▶ 재생 버튼을 눌러주세요');
   });
-  audio.addEventListener('ended', () => { stopProgress(); handleEnded(); });
-  audio.addEventListener('error', () => { showToast('파일을 재생할 수 없어요'); isLocalTrack = false; });
-
-  // play() 결과 처리 (이미 호출된 promise)
-  if(playPromise) {
-    playPromise
-      .then(() => { setPlayState(true); startLocalProgress(); })
-      .catch(() => {
-        // 자동재생 실패 시 일시정지 상태로 대기 — 탭하면 재생됨
-        setPlayState(false);
-        showToast('▶ 재생 버튼을 눌러주세요');
-      });
-  }
 }
 
 // 로컬 진행바 업데이트
@@ -4387,21 +4373,13 @@ document.getElementById('confirm-local-mp3').addEventListener('click', () => {
   queue = [...queue, ...tracks];
   queueIndex = startIdx;
 
-  // ★ 클릭 제스처 컨텍스트 안에서 바로 play() 호출 — 모바일 autoplay 허용
-  const firstAudio = new Audio();
-  firstAudio.src = tracks[0].localUrl;
-  firstAudio.volume = (parseInt(document.getElementById('vol-slider').value) || 80) / 100;
-  const playPromise = firstAudio.play();
+  // ★ 클릭 제스처 컨텍스트 안에서 Audio unlock
+  getUnlockedAudio();
 
   document.getElementById('modal-local-mp3').classList.add('hidden');
+  playLocalTrack(tracks[0]);
 
-  // play()가 시작된 Audio 객체를 넘겨서 UI만 연결
-  playLocalTrackWithAudio(tracks[0], firstAudio, playPromise);
-
-  const msg = tracks.length === 1
-    ? `🎵 ${tracks[0].title} 재생 시작`
-    : `🎵 ${tracks.length}개 파일 재생목록에 추가됨`;
-  showToast(msg);
+  showToast(tracks.length === 1 ? `🎵 ${tracks[0].title} 재생 시작` : `🎵 ${tracks.length}개 파일 재생목록에 추가됨`);
   pendingLocalFiles = [];
 });
 
