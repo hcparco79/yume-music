@@ -4182,6 +4182,8 @@ const offlineStyle = document.createElement('style');
 offlineStyle.textContent = `
   @keyframes slideDown { from{transform:translateY(-100%);opacity:0} to{transform:translateY(0);opacity:1} }
   @keyframes slideUp2 { from{transform:translateY(0);opacity:1} to{transform:translateY(-100%);opacity:0} }
+  @keyframes playPulse { 0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(232,255,71,0.5)} 50%{transform:scale(1.12);box-shadow:0 0 0 10px rgba(232,255,71,0)} }
+  .play-pulse { animation: playPulse 0.7s ease 4 !important; }
 `;
 document.head.appendChild(offlineStyle);
 
@@ -4247,7 +4249,11 @@ function playLocalTrack(track) {
 
   audio.play().catch(() => {
     setPlayState(false);
-    showToast('▶ 재생 버튼을 눌러주세요');
+    showToast('▶ 탭해서 재생');
+    // 플레이 버튼 강조 애니메이션
+    const btn = document.getElementById('btn-play-pause');
+    btn.classList.add('play-pulse');
+    setTimeout(() => btn.classList.remove('play-pulse'), 3000);
   });
 }
 
