@@ -4374,7 +4374,8 @@ dropZone.addEventListener('drop', (e) => {
 // 모달 확인 → 재생목록에 추가 후 즉시 재생
 document.getElementById('confirm-local-mp3').addEventListener('click', () => {
   if(!pendingLocalFiles.length) return;
-  const tracks = pendingLocalFiles.map(fileToTrack);
+  const files = [...pendingLocalFiles];
+  const tracks = files.map(fileToTrack);
   const startIdx = queue.length;
   queue = [...queue, ...tracks];
   queueIndex = startIdx;
@@ -4387,6 +4388,9 @@ document.getElementById('confirm-local-mp3').addEventListener('click', () => {
 
   showToast(tracks.length === 1 ? `🎵 ${tracks[0].title} 재생 시작` : `🎵 ${tracks.length}개 파일 재생목록에 추가됨`);
   pendingLocalFiles = [];
+
+  // IndexedDB에 비동기 저장 (재생과 무관하게 백그라운드로)
+  tracks.forEach((track, i) => saveLocalFileToDB(track, files[i]));
 });
 
 document.getElementById('cancel-local-mp3').addEventListener('click', () => {
@@ -4466,7 +4470,83 @@ document.getElementById('fsp-download-btn').addEventListener('click', openDownlo
 document.getElementById('fsp-local-btn').addEventListener('click', () => { closeFullscreenPlayer(); openLocalMp3Modal(); });
 
 // ============================================================
-// INIT
+// IndexedDB — 로컬 파일 영구 저장
+// ============================================================
+const LOCAL_DB_NAME = 'yume-local-files';
+const LOCAL_DB_VER  = 1;
+const LOCAL_STORE   = 'files';
+let localDB = null;
+
+function openLocalDB() {
+  return new Promise((resolve, reject) => {
+    if(localDB) { resolve(localDB); return; }
+    const req = indexedDB.open(LOCAL_DB_NAME, LOCAL_DB_VER);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains(LOCAL_STORE)) {
+        db.createObjectStore(LOCAL_STORE, { keyPath: 'videoId' });
+      }
+    };
+    req.onsuccess = e => { localDB = e.target.result; resolve(localDB); };
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+async function saveLocalFileToDB(track, file) {
+  try {
+    const db = await openLocalDB();
+    const blob = new Blob([await file.arrayBuffer()], { type: file.type || 'audio/mpeg' });
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(LOCAL_STORE, 'readwrite');
+      tx.objectStore(LOCAL_STORE).put({ ...track, blob, localUrl: null }); // localUrl은 재생성
+      tx.oncomplete = () => resolve();
+      tx.onerror    = () => reject(tx.error);
+    });
+  } catch(e) { console.warn('[localDB] save failed:', e); }
+}
+
+async function loadLocalFilesFromDB() {
+  try {
+    const db = await openLocalDB();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(LOCAL_STORE, 'readonly');
+      const req = tx.objectStore(LOCAL_STORE).getAll();
+      req.onsuccess = () => {
+        const rows = req.result || [];
+        // blob → Object URL 재생성
+        const tracks = rows.map(row => {
+          const url = URL.createObjectURL(row.blob);
+          return { ...row, localUrl: url, blob: undefined };
+        });
+        resolve(tracks);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  } catch(e) { console.warn('[localDB] load failed:', e); return []; }
+}
+
+async function deleteLocalFileFromDB(videoId) {
+  try {
+    const db = await openLocalDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(LOCAL_STORE, 'readwrite');
+      tx.objectStore(LOCAL_STORE).delete(videoId);
+      tx.oncomplete = resolve;
+    });
+  } catch(e) { console.warn('[localDB] delete failed:', e); }
+}
+
+// INIT: 앱 시작 시 저장된 로컬 파일 복원
+(async () => {
+  try {
+    const saved = await loadLocalFilesFromDB();
+    if(!saved.length) return;
+    queue = [...queue, ...saved];
+    renderQueueList();
+    showToast(`💾 로컬 파일 ${saved.length}개 복원됨`);
+  } catch(e) { console.warn('[localDB] restore failed:', e); }
+})();
+
 // ============================================================
 renderPlaylistNav();
 renderHomeViews();
