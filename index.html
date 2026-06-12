@@ -4543,7 +4543,44 @@ async function deleteLocalFileFromDB(videoId) {
     if(!saved.length) return;
     queue = [...queue, ...saved];
     renderQueueList();
-    showToast(`💾 로컬 파일 ${saved.length}개 복원됨`);
+
+    // 첫 번째 로컬 트랙을 현재 트랙으로 준비 (재생은 하지 않음 — 제스처 필요)
+    const first = saved[0];
+    queueIndex = queue.length - saved.length;
+    currentTrack = first;
+    isLocalTrack = true;
+
+    // localAudio 미리 준비 — src만 세팅, play()는 사용자 탭 때
+    if(localAudio) { localAudio.pause(); }
+    localAudio = unlockedAudio || new Audio();
+    localAudio.src = first.localUrl;
+    localAudio.volume = (parseInt(document.getElementById('vol-slider').value) || 80) / 100;
+    localAudio.onplay  = () => { setPlayState(true);  startLocalProgress(); };
+    localAudio.onpause = () => { setPlayState(false); stopProgress(); };
+    localAudio.onended = () => { stopProgress(); handleEnded(); };
+    localAudio.onerror = () => { showToast('파일을 재생할 수 없어요'); isLocalTrack = false; };
+
+    // UI 업데이트
+    document.getElementById('player-title').textContent = first.title;
+    document.getElementById('player-artist').textContent = first.artist || '로컬 파일';
+    document.getElementById('player-thumb-img').style.display = 'none';
+    document.getElementById('np-title').textContent = first.title;
+    document.getElementById('np-artist').textContent = first.artist || '로컬 파일';
+    document.getElementById('np-art-img').style.display = 'none';
+    document.getElementById('np-art-placeholder').style.display = 'flex';
+    updateLikeButtons();
+    updateMediaSession(first);
+    setPlayState(false);
+
+    showToast(`💾 로컬 파일 ${saved.length}개 복원됨 — ▶ 탭해서 재생`);
+
+    // 플레이 버튼 펄스로 안내
+    setTimeout(() => {
+      const btn = document.getElementById('btn-play-pause');
+      btn.classList.add('play-pulse');
+      setTimeout(() => btn.classList.remove('play-pulse'), 3000);
+    }, 500);
+
   } catch(e) { console.warn('[localDB] restore failed:', e); }
 })();
 
